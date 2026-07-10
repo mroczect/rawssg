@@ -98,11 +98,11 @@ target:
 # These use "cargo run --" to execute the built binary commands.
 .PHONY: init-homepage init-blog config-check config-init config-show compile serve help-rawssg
 
-init-homepage:
-	$(CARGO) run -- init homepage
+create:
+	$(CARGO) run -- create
 
-init-blog:
-	$(CARGO) run -- init blog
+create-blog:
+	$(CARGO) run -- create blog
 
 config-check:
 	$(CARGO) run -- config check

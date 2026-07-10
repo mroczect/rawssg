@@ -104,9 +104,18 @@ pub fn build_html(
     content_html: &str,
     base_path: &str,
     favicon_uri: &str,
+    is_blog: bool,
 ) -> String {
-    let navbar_html = gen_navbar(&config.navbar, base_path);
-    let sidebar_html = gen_sidebar(&config.sidebar, base_path);
+    let navbar_html = if is_blog {
+        String::new()
+    } else {
+        gen_navbar(&config.navbar, base_path)
+    };
+    let sidebar_html = if is_blog {
+        String::new()
+    } else {
+        gen_sidebar(&config.sidebar, base_path)
+    };
 
     INDEX_TEMPLATE
         .replace("{{ base_path }}", base_path)
@@ -122,7 +131,6 @@ pub fn build_html(
         .replace("{{ sidebar }}", &sidebar_html)
 }
 
-/// Kumpulkan semua file .md di bawah content_dir (rekursif)
 fn collect_md_files(content_dir: &str) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     for entry in WalkDir::new(content_dir) {
@@ -180,11 +188,12 @@ pub fn compile_site(content_dir: &str, output_dir: &str) -> Result<()> {
 
     // 4. Kumpulkan semua file markdown
     let md_files = collect_md_files(content_dir)?;
+    
 
     // 5. Proses setiap file
     for path in &md_files {
-    
-    	
+
+
         let raw = fs::read_to_string(path)
             .with_context(|| format!("Gagal membaca {}", path.display()))?;
         let (fm, content_html) = parse_markdown(&raw)?;
@@ -201,9 +210,8 @@ pub fn compile_site(content_dir: &str, output_dir: &str) -> Result<()> {
         } else {
             content_html
         };
-
-        let html = build_html(&global_config, &fm, &final_content, &base_path, &favicon_data_uri);
-
+        let is_blog = rel_path.starts_with("blog");
+        let html = build_html(&global_config, &fm, &final_content, &base_path, &favicon_data_uri, is_blog);
         let out_path = Path::new(output_dir).join(rel_path.with_extension("html"));
         if let Some(parent) = out_path.parent() {
             fs::create_dir_all(parent)?;
@@ -232,4 +240,3 @@ pub fn generate_favicon_data_uri(name: &str) -> String {
     let encoded = base64::engine::general_purpose::STANDARD.encode(svg);
     format!("data:image/svg+xml;base64,{}", encoded)
 }
-
