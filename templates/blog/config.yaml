@@ -1,0 +1,4 @@
+navbar:
+  - label: Home
+    url: index.html
+sidebar: []

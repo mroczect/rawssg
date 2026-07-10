@@ -15,15 +15,38 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body data-terminal="full">
-    <div class="progress-bar" id="progress-bar"></div>
-
+    <div
+      class="progress-bar"
+      id="progress-bar"
+      role="progressbar"
+      aria-label="Reading progress"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      aria-valuenow="0"
+    ></div>
     <a class="skip-link" href="#main-content">Skip to content</a>
+
+    {{ navbar }}
+
+    <!-- Sidebar dengan tombol toggle -->
+    <button
+      class="sidebar-toggle"
+      id="sidebar-toggle"
+      aria-label="Toggle sidebar"
+    >
+      <span class="sidebar-toggle-icon" aria-hidden="true">☰</span>
+    </button>
+    <aside class="sidebar" id="sidebar">{{ sidebar }}</aside>
 
     <main class="manpage" id="main-content">
       <header class="page-header">
-        <div class="ascii-decor">════════════════════════════════════════</div>
+        <div class="ascii-decor" aria-hidden="true">
+          ════════════════════════════════════════
+        </div>
 
-        <h1 class="title">{{ title }}<span class="blinking-cursor">_</span></h1>
+        <h1 class="title">
+          {{ title }}<span class="blinking-cursor" aria-hidden="true">_</span>
+        </h1>
 
         <p class="synopsis" data-typewriter="{{ desc }}">{{ desc }}</p>
 
@@ -44,9 +67,47 @@
           <p><strong>License</strong> {{ license }}</p>
           <p><strong>Date Modified</strong> <span id="date_modified"></span></p>
         </div>
-      </header>
 
-      <!-- SEARCH & TOC DIHAPUS -->
+        <!-- Search & TOC -->
+        <div class="page-tools" id="page-tools">
+          <div class="term-search">
+            <span class="search-prompt" aria-hidden="true"
+              >$ man snapcat | grep</span
+            >
+            <input
+              type="text"
+              id="search-input"
+              placeholder="Search documentation..."
+              autocomplete="off"
+              aria-label="Search within page"
+            />
+            <span
+              class="search-results"
+              id="search-results"
+              aria-live="polite"
+            ></span>
+            <button
+              class="search-clear"
+              id="search-clear"
+              aria-label="Clear search"
+            >
+              ×
+            </button>
+          </div>
+
+          <button
+            class="toc-toggle"
+            id="toc-toggle"
+            aria-expanded="false"
+            aria-controls="man-toc"
+          >
+            📑 Table of Contents
+          </button>
+          <nav class="man-toc" id="man-toc" aria-label="Table of contents">
+            <ul id="toc-list"></ul>
+          </nav>
+        </div>
+      </header>
 
       <article class="content" id="content">{{ content }}</article>
 
@@ -54,11 +115,17 @@
         <p>{{ footer }} &copy; <span id="current-year"></span></p>
       </footer>
 
-      <button class="back-to-top" id="back-to-top" aria-label="Back to top">
-        [^]
+      <button
+        class="back-to-top"
+        id="back-to-top"
+        type="button"
+        aria-label="Back to top of page"
+      >
+        <span aria-hidden="true">[^]</span>
       </button>
     </main>
 
+    <!-- Help Modal -->
     <div
       id="help-modal"
       class="help-modal"
@@ -75,11 +142,18 @@
           <li><kbd>g</kbd> : go to top</li>
           <li><kbd>G</kbd> : go to bottom</li>
           <li><kbd>p</kbd> : print page</li>
-          <li><kbd>c</kbd> : toggle typewriter effect</li>
+          <li><kbd>c</kbd> : toggle typewriter</li>
           <li><kbd>l</kbd> : toggle light theme</li>
-          <li><kbd>?</kbd> : show this help</li>
+          <li><kbd>s</kbd> : focus search</li>
+          <li><kbd>?</kbd> : show/hide this help</li>
+          <li><kbd>Escape</kbd> : close help / clear search</li>
         </ul>
-        <button class="help-close" id="help-close" aria-label="Close help">
+        <button
+          class="help-close"
+          id="help-close"
+          type="button"
+          aria-label="Close help"
+        >
           [x]
         </button>
       </div>

@@ -1,0 +1,6 @@
+navbar:
+  - label: Home
+    url: index.html
+  - label: Blog
+    url: blog.html
+sidebar: []
