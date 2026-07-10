@@ -1,6 +1,7 @@
 use std::process::Command;
 
 fn main() {
+    // Tanggal & jam build
     let now = chrono::Local::now();
     println!(
         "cargo:rustc-env=BUILD_DATE={}",
@@ -24,6 +25,8 @@ fn main() {
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .unwrap_or_else(|_| "unknown".into());
     println!("cargo:rustc-env=RUST_VERSION={}", rustc_version);
+
+    // Informasi Git
     let git_hash = Command::new("git")
         .args(["rev-parse", "--short", "HEAD"])
         .output()
@@ -38,18 +41,14 @@ fn main() {
         .unwrap_or_else(|_| "unknown".into());
     println!("cargo:rustc-env=GIT_BRANCH={}", git_branch);
 
-    // Status direktori kerja (apakah ada perubahan yang belum di-commit)
     let dirty = Command::new("git")
         .args(["diff-index", "--quiet", "HEAD", "--"])
         .status()
         .map(|s| !s.success())
         .unwrap_or(false);
-    println!(
-        "cargo:rustc-env=GIT_DIRTY={}",
-        if dirty { "yes" } else { "no" }
-    );
+    println!("cargo:rustc-env=GIT_DIRTY={}", if dirty { "yes" } else { "no" });
 
-    // Selalu rebuild jika file ini berubah (agar env variables selalu segar)
+    // Rebuild hanya jika file ini atau HEAD berubah
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=.git/HEAD");
 }

@@ -25,9 +25,13 @@ fn print_manual() {
 
 fn print_build_info() {
     println!("rawssg v{}", env!("CARGO_PKG_VERSION"));
-    println!("Build date: {}", env!("BUILD_DATE"));
-    println!("Profile: {}", env!("PROFILE"));
-    println!("Target: {}", env!("TARGET"));
+    println!("Build date       : {}", env!("BUILD_DATE"));
+    println!("Profile          : {}", env!("PROFILE"));
+    println!("Target           : {}", env!("TARGET"));
+    println!("Rust compiler    : {}", env!("RUST_VERSION"));
+    println!("Git commit       : {}", env!("GIT_HASH"));
+    println!("Git branch       : {}", env!("GIT_BRANCH"));
+    println!("Working tree     : {}", if env!("GIT_DIRTY") == "yes" { "dirty (uncommitted changes)" } else { "clean" });
 }
 
 // --- Struktur CLI ---
