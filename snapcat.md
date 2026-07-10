@@ -2,7 +2,16 @@
 .  # .
 ├── Cargo.lock
 ├── Cargo.toml
+├── Makefile
 ├── build.rs
+├── docs
+│   ├── config.yaml
+│   ├── content
+│   │   ├── first-post.md
+│   ├── dist
+│   │   ├── index.html
+│   │   ├── script.js
+│   │   ├── styles.css
 ├── snapcat.md
 ├── src
 │   ├── compiler.rs
@@ -29,16 +38,16 @@
 
 ```rust
 mod compiler;
-mod embedded;
-mod types;
 mod config;
+mod embedded;
 mod init;
 mod serve;
+mod types;
 
-use clap::{Parser, Subcommand};
 use anyhow::Result;
+use clap::{Parser, Subcommand};
 
-// Tambahkan ini
+// --- Fungsi bantuan ---
 fn print_manual() {
     println!("rawssg - Static Site Generator dengan vibe terminal\n");
     println!("USAGE:");
@@ -55,48 +64,101 @@ fn print_manual() {
 
 fn print_build_info() {
     println!("rawssg v{}", env!("CARGO_PKG_VERSION"));
-    println!("Build date: {}", env!("BUILD_DATE"));  // perlu build.rs, sementara kosong
-    println!("Profile: {}", env!("PROFILE"));
-    println!("Target: {}", env!("TARGET"));
+    println!("Build date       : {}", env!("BUILD_DATE"));
+    println!("Profile          : {}", env!("PROFILE"));
+    println!("Target           : {}", env!("TARGET"));
+    println!("Rust compiler    : {}", env!("RUST_VERSION"));
+    println!("Git commit       : {}", env!("GIT_HASH"));
+    println!("Git branch       : {}", env!("GIT_BRANCH"));
+    println!("Working tree     : {}", if env!("GIT_DIRTY") == "yes" { "dirty (uncommitted changes)" } else { "clean" });
 }
 
-// ... (derive Cli dan Commands tetap) ...
+// --- Struktur CLI ---
+#[derive(Parser)]
+#[command(name = "rawssg")]
+#[command(about = "Static site generator dengan vibe terminal", long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Menampilkan panduan penggunaan (manpage)
+    Help,
+    /// Menampilkan versi rawssg
+    Version,
+    /// Menampilkan metadata build
+    Info,
+    /// Inisialisasi proyek baru
+    Init {
+        #[command(subcommand)]
+        template: InitTemplate,
+    },
+    /// Manajemen konfigurasi
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
+    /// Build situs statis
+    Compile {
+        /// Folder konten (default: content)
+        content_dir: Option<String>,
+        /// Folder output (default: dist)
+        output_dir: Option<String>,
+    },
+    /// Jalankan server lokal dengan live-reload
+    Serve {
+        /// Port (default: 3000)
+        port: Option<u16>,
+    },
+}
+
+#[derive(Subcommand)]
+enum InitTemplate {
+    /// Landing page keren ala VitePress + daftar blog
+    Homepage,
+    /// Halaman blog minimalis
+    Blog,
+}
+
+#[derive(Subcommand)]
+enum ConfigAction {
+    /// Validasi frontmatter dan struktur proyek
+    Check,
+    /// Buat config.yaml default
+    Init,
+    /// Tampilkan konfigurasi saat ini
+    Show,
+}
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Help => {
-            print_manual();
-        }
-        Commands::Version => {
-            println!("rawssg v{}", env!("CARGO_PKG_VERSION"));
-        }
-        Commands::Info => {
-            print_build_info();
-        }
-        Commands::Init { template } => {
-            match template {
-                InitTemplate::Homepage => init::create_homepage_project()?,
-                InitTemplate::Blog => init::create_blog_project()?,
-            }
-        }
-        Commands::Config { action } => {
-            match action {
-                ConfigAction::Check => config::validate_all()?,
-                ConfigAction::Init => config::create_default_config()?,
-                ConfigAction::Show => config::show_current_config()?,
-            }
-        }
-        Commands::Compile { content_dir, output_dir } => {
+        Commands::Help => print_manual(),
+        Commands::Version => println!("rawssg v{}", env!("CARGO_PKG_VERSION")),
+        Commands::Info => print_build_info(),
+        Commands::Init { template } => match template {
+            InitTemplate::Homepage => init::create_homepage_project()?,
+            InitTemplate::Blog => init::create_blog_project()?,
+        },
+        Commands::Config { action } => match action {
+            ConfigAction::Check => config::validate_all()?,
+            ConfigAction::Init => config::create_default_config()?,
+            ConfigAction::Show => config::show_current_config()?,
+        },
+        Commands::Compile {
+            content_dir,
+            output_dir,
+        } => {
             let content = content_dir.as_deref().unwrap_or("content");
             let output = output_dir.as_deref().unwrap_or("dist");
-            compiler::compile_site(content, output)?;   // <-- panggil dari compiler
+            compiler::compile_site(content, output)?;
         }
         Commands::Serve { port } => {
             let port = port.unwrap_or(3000);
-            let output_dir = "dist";   // default folder output yang diserve
-            // Pastikan sudah ada hasil build, atau lakukan build dulu
+            let output_dir = "dist";
             if !std::path::Path::new(output_dir).exists() {
                 compiler::compile_site("content", output_dir)?;
             }
@@ -115,56 +177,79 @@ fn main() -> Result<()> {
 ## ./src/compiler.rs
 
 ```rust
-use anyhow::{Context, Result};
-use pulldown_cmark::{html, Options, Parser};
-use crate::embedded::INDEX_TEMPLATE;
-use crate::types::{GlobalConfig, PageFrontMatter, NavItem};
-use std::path::Path;
-use std::fs;
-use crate::embedded;
-use walkdir::WalkDir;
 use crate::config;
+use crate::embedded;
+use crate::embedded::INDEX_TEMPLATE;
+use crate::types::{GlobalConfig, NavItem, PageFrontMatter};
+use anyhow::{Context, Result};
+use pulldown_cmark::{Options, Parser, html};
+use std::fs;
+use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
+use base64::Engine;
 
-fn gen_navbar(items: &[NavItem]) -> String {
-    if items.is_empty() { return String::new(); }
+fn relative_prefix(depth: usize) -> String {
+    if depth == 0 {
+        "./".to_string()
+    } else {
+        "../".repeat(depth)
+    }
+}
+
+fn gen_navbar(items: &[NavItem], base_path: &str) -> String {
+    if items.is_empty() {
+        return String::new();
+    }
     let mut html = String::from("<nav class=\"top-nav\"><ul>");
     for item in items {
+        // Jika URL adalah absolute (http/https) atau dimulai '/', biarkan
+        let url = if item.url.starts_with("http") || item.url.starts_with('/') {
+            item.url.clone()
+        } else {
+            format!("{}{}", base_path, item.url)
+        };
         html.push_str(&format!(
             "<li><a href=\"{}\">{}</a></li>",
-            item.url, item.label
+            url, item.label
         ));
     }
     html.push_str("</ul></nav>");
     html
 }
 
-/// Generate HTML untuk sidebar
-fn gen_sidebar(items: &[NavItem]) -> String {
-    if items.is_empty() { return String::new(); }
+fn gen_sidebar(items: &[NavItem], base_path: &str) -> String {
+    if items.is_empty() {
+        return String::new();
+    }
     let mut html = String::from(
         "<aside class=\"sidebar\" id=\"sidebar\">\
-         <button id=\"sidebar-toggle\">☰</button><ul>"
+         <button id=\"sidebar-toggle\">☰</button><ul>",
     );
     for item in items {
+        let url = if item.url.starts_with("http") || item.url.starts_with('/') {
+            item.url.clone()
+        } else {
+            format!("{}{}", base_path, item.url)
+        };
         html.push_str(&format!(
             "<li><a href=\"{}\">{}</a></li>",
-            item.url, item.label
+            url, item.label
         ));
     }
     html.push_str("</ul></aside>");
     html
 }
 
-/// Parse Markdown + frontmatter (manual, tapi aman)
+/// Parse Markdown + frontmatter
 pub fn parse_markdown(raw: &str) -> Result<(PageFrontMatter, String)> {
     let trimmed = raw.trim_start();
     if !trimmed.starts_with("---") {
         anyhow::bail!("Frontmatter tidak ditemukan (harus diawali '---')");
     }
 
-    // Cari akhir blok YAML (harus ada '---' lagi)
     let without_first = trimmed.trim_start_matches("---").trim_start();
-    let end = without_first.find("\n---")
+    let end = without_first
+        .find("\n---")
         .or_else(|| without_first.find("\r\n---"))
         .unwrap_or(without_first.len());
 
@@ -174,8 +259,8 @@ pub fn parse_markdown(raw: &str) -> Result<(PageFrontMatter, String)> {
         .trim_start_matches("\r\n---")
         .trim();
 
-    let fm: PageFrontMatter = serde_yaml::from_str(yaml_str)
-        .context("Gagal parsing frontmatter YAML")?;
+    let fm: PageFrontMatter =
+        serde_yaml::from_str(yaml_str).context("Gagal parsing frontmatter YAML")?;
 
     let md_html = markdown_to_html(markdown_str);
     Ok((fm, md_html))
@@ -196,11 +281,15 @@ pub fn build_html(
     config: &GlobalConfig,
     fm: &PageFrontMatter,
     content_html: &str,
+    base_path: &str,
+    favicon_uri: &str,
 ) -> String {
-    let navbar_html = gen_navbar(&config.navbar);
-    let sidebar_html = gen_sidebar(&config.sidebar);
+    let navbar_html = gen_navbar(&config.navbar, base_path);
+    let sidebar_html = gen_sidebar(&config.sidebar, base_path);
 
     INDEX_TEMPLATE
+        .replace("{{ base_path }}", base_path)
+        .replace("{{ favicon }}", &format!("<link rel=\"icon\" href=\"{}\" />", favicon_uri))
         .replace("{{ title }}", &fm.title)
         .replace("{{ desc }}", &fm.desc)
         .replace("{{ author }}", &fm.author)
@@ -212,33 +301,89 @@ pub fn build_html(
         .replace("{{ sidebar }}", &sidebar_html)
 }
 
-pub fn compile_site(content_dir: &str, output_dir: &str) -> Result<()> {
-    // Load global config
-    let global_config = config::load_config("config.yaml")?;
-
-    fs::create_dir_all(&output_dir)?;
-    let css_dest = Path::new(&output_dir).join("styles.css");
-    fs::write(&css_dest, embedded::STYLES_CSS)?;
-    let js_dest = Path::new(&output_dir).join("script.js");
-    fs::write(&js_dest, embedded::SCRIPT_JS)?;
-
-    // Proses semua file .md di content_dir secara rekursif
+/// Kumpulkan semua file .md di bawah content_dir (rekursif)
+fn collect_md_files(content_dir: &str) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
     for entry in WalkDir::new(content_dir) {
         let entry = entry?;
-        let path = entry.path();
-        if path.extension().unwrap_or_default() != "md" {
-            continue;
+        if entry.path().extension().unwrap_or_default() == "md" {
+            files.push(entry.path().to_path_buf());
         }
+    }
+    Ok(files)
+}
 
-        let raw = fs::read_to_string(&path)
+/// Buat daftar blog untuk ditampilkan di homepage
+fn generate_blog_list(content_dir: &str, base_path: &str, all_md: &[PathBuf]) -> Result<String> {
+    let mut posts = Vec::new();
+    for path in all_md {
+        // Hanya file di dalam content/blog/
+        if path.starts_with(Path::new(content_dir).join("blog")) {
+            let raw = fs::read_to_string(path)?;
+            let (fm, _) = parse_markdown(&raw)?;
+            let rel = path.strip_prefix(content_dir)?.with_extension("html");
+            let url = format!("{}{}", base_path, rel.display());
+            posts.push((fm.title, url));
+        }
+    }
+
+    if posts.is_empty() {
+        return Ok("<p>No blog posts yet.</p>".to_string());
+    }
+
+    let mut list = String::from("<ul class=\"blog-list\">");
+    for (title, url) in posts {
+        list.push_str(&format!("<li><a href=\"{}\">{}</a></li>", url, title));
+    }
+    list.push_str("</ul>");
+    Ok(list)
+}
+
+pub fn compile_site(content_dir: &str, output_dir: &str) -> Result<()> {
+    // 1. Bersihkan direktori output jika ada
+    if Path::new(output_dir).exists() {
+        fs::remove_dir_all(output_dir)?;
+    }
+    fs::create_dir_all(output_dir)?;
+
+    // 2. Salin aset statis
+    let css_dest = Path::new(output_dir).join("styles.css");
+    fs::write(&css_dest, embedded::STYLES_CSS)?;
+    let js_dest = Path::new(output_dir).join("script.js");
+    fs::write(&js_dest, embedded::SCRIPT_JS)?;
+
+    // 3. Muat konfigurasi global
+    let global_config = config::load_config("config.yaml")?;
+    let site_name = &global_config.site_name;
+    let favicon_data_uri = generate_favicon_data_uri(site_name);
+
+    // 4. Kumpulkan semua file markdown
+    let md_files = collect_md_files(content_dir)?;
+
+    // 5. Proses setiap file
+    for path in &md_files {
+    
+    	
+        let raw = fs::read_to_string(path)
             .with_context(|| format!("Gagal membaca {}", path.display()))?;
         let (fm, content_html) = parse_markdown(&raw)?;
-        let html = build_html(&global_config, &fm, &content_html);
 
-        // Tentukan path output
         let rel_path = path.strip_prefix(content_dir)?;
-        let out_name = rel_path.with_extension("html");
-        let out_path = Path::new(&output_dir).join(out_name);
+        // Hitung kedalaman: jumlah komponen direktori sebelum file
+        let depth = rel_path.components().count().saturating_sub(1);
+        let base_path = relative_prefix(depth);
+
+        // Jika ini adalah index.md di root, proses blog_list
+        let final_content = if rel_path == Path::new("index.md") {
+            let blog_list = generate_blog_list(content_dir, &base_path, &md_files)?;
+            content_html.replace("{{ blog_list }}", &blog_list)
+        } else {
+            content_html
+        };
+
+        let html = build_html(&global_config, &fm, &final_content, &base_path, &favicon_data_uri);
+
+        let out_path = Path::new(output_dir).join(rel_path.with_extension("html"));
         if let Some(parent) = out_path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -249,22 +394,46 @@ pub fn compile_site(content_dir: &str, output_dir: &str) -> Result<()> {
     println!("\n🎉 Situs selesai di-generate di folder '{}'", output_dir);
     Ok(())
 }
+
+pub fn generate_favicon_data_uri(name: &str) -> String {
+    let first_char = name.chars().next().unwrap_or('R').to_uppercase().to_string();
+    let hue = (name.bytes().fold(0u32, |a, b| a.wrapping_add(b as u32)) % 360) as u16;
+    let bg_color = format!("hsl({}, 70%, 50%)", hue);
+
+    let svg = format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\
+            <circle cx=\"50\" cy=\"50\" r=\"45\" fill=\"{}\" />\
+            <text x=\"50\" y=\"50\" text-anchor=\"middle\" dy=\".35em\" font-size=\"55\" font-weight=\"bold\" fill=\"#fff\" font-family=\"system-ui, sans-serif\">{}</text>\
+        </svg>",
+        bg_color, first_char
+    );
+
+    let encoded = base64::engine::general_purpose::STANDARD.encode(svg);
+    format!("data:image/svg+xml;base64,{}", encoded)
+}
+
 ```
 ## ./src/types.rs
 
 ```rust
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Deserialize, Serialize)]   // <-- tambahkan Serialize
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct NavItem {
     pub label: String,
     pub url: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]           // <-- tambahkan Serialize
+#[derive(Debug, Deserialize, Serialize)]
 pub struct GlobalConfig {
     pub navbar: Vec<NavItem>,
     pub sidebar: Vec<NavItem>,
+    #[serde(default = "default_site_name")]
+    pub site_name: String,
+}
+
+fn default_site_name() -> String {
+    "rawssg".to_string()
 }
 
 #[derive(Debug, Deserialize)]
@@ -287,24 +456,20 @@ pub const SCRIPT_JS: &str = include_str!("../templates/script.js");
 ## ./src/config.rs
 
 ```rust
+use crate::compiler; // <-- tambahkan ini
+use crate::types::GlobalConfig;
 use anyhow::{Context, Result};
 use std::fs;
-use crate::types::GlobalConfig;
-use crate::compiler;                      // <-- tambahkan ini
-use walkdir::WalkDir;                     // <-- ganti glob
+use walkdir::WalkDir; // <-- ganti glob
 
 pub fn load_config(path: &str) -> Result<GlobalConfig> {
     let yaml = fs::read_to_string(path)
         .with_context(|| format!("Gagal membaca config file '{}'", path))?;
-    let config: GlobalConfig = serde_yaml::from_str(&yaml)
-        .context("Gagal parsing config.yaml")?;
+    let config: GlobalConfig = serde_yaml::from_str(&yaml).context("Gagal parsing config.yaml")?;
     Ok(config)
 }
 
 pub fn validate_all() -> Result<()> {
-    // 1. Baca config.yaml
-    let config = load_config("config.yaml")?; // config tidak digunakan tapi bisa diperiksa nanti
-    // 2. Scan folder content/ secara rekursif
     for entry in WalkDir::new("content") {
         let entry = entry?;
         let path = entry.path();
@@ -381,27 +546,34 @@ pub fn create_blog_project() -> Result<()> {
 
 ```rust
 use anyhow::Result;
+use notify::{Event, EventKind, RecursiveMode, Watcher};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc;
 use std::thread;
-use std::path::{Path, PathBuf};
-use std::fs;
-use tiny_http::{Server, Response, Header};
-use notify::{Watcher, RecursiveMode, Event, EventKind};
+use tiny_http::{Header, Response, Server};
 
 pub fn start_server(output_dir: &str, port: u16) -> Result<()> {
+    // Channel: watcher -> rebuild thread
     let (tx, rx) = mpsc::channel();
-    let tx_watcher = tx.clone();
 
     // Watcher thread
+    let tx_watcher = tx.clone();
     let watch_dirs = vec!["content", "templates", "config.yaml"];
     thread::spawn(move || {
         let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
             if let Ok(event) = res {
-                if matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_)) {
+                if matches!(
+                    event.kind,
+                    EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_)
+                ) {
                     tx_watcher.send(()).ok();
                 }
             }
-        }).unwrap();
+        })
+        .unwrap();
         for dir in &watch_dirs {
             let path = Path::new(dir);
             if path.is_dir() {
@@ -410,55 +582,50 @@ pub fn start_server(output_dir: &str, port: u16) -> Result<()> {
                 watcher.watch(path, RecursiveMode::NonRecursive).ok();
             }
         }
-        loop { thread::park(); }
+        loop {
+            thread::park();
+        }
     });
 
-    // Rebuild signal handler
-    let rebuild_tx = tx.clone();
+    // Reload counter: bertambah setiap rebuild selesai
+    let reload_counter = Arc::new(AtomicU32::new(0));
+    let counter_for_rebuild = reload_counter.clone();
+
+    // Rebuild thread – otomatis rebuild lalu naikkan counter
     thread::spawn(move || {
         loop {
-            rx.recv().ok();
+            rx.recv().ok(); // tunggu perubahan
             println!("📝 Perubahan terdeteksi, rebuild...");
-            if let Err(e) = super::compiler::compile_site("content", "dist") {
+            if let Err(e) = crate::compiler::compile_site("content", "dist") {
                 eprintln!("Rebuild error: {}", e);
             } else {
-                rebuild_tx.send(()).ok(); // kasih tahu server timestamp baru
+                counter_for_rebuild.fetch_add(1, Ordering::SeqCst);
+                println!("✅ Rebuild selesai.");
             }
         }
     });
 
-    // Simple static file server + long polling endpoint
+    // HTTP server
     let server = Server::http(format!("0.0.0.0:{}", port)).unwrap();
     println!("🚀 Server berjalan di http://localhost:{}", port);
 
     let dist_path = PathBuf::from(output_dir);
-    let reload_counter = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
-    let reload_counter_clone = reload_counter.clone();
-
-    // Thread untuk mengupdate counter saat rebuild selesai
-    thread::spawn(move || {
-        loop {
-            rx.recv().ok(); // terima sinyal rebuild selesai
-            reload_counter_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        }
-    });
 
     for request in server.incoming_requests() {
         let url = request.url().to_string();
-        let path = if url == "/" {
+        let file_path = if url == "/" {
             dist_path.join("index.html")
         } else {
-            dist_path.join(&url[1..]) // hilangkan leading '/'
+            dist_path.join(&url[1..])
         };
 
-        // Long polling untuk auto-reload
+        // Long polling untuk live reload
         if url == "/__rawssg_reload" {
-            let counter = reload_counter.load(std::sync::atomic::Ordering::SeqCst);
+            let current = reload_counter.load(Ordering::SeqCst);
             let start = std::time::Instant::now();
             let timeout = std::time::Duration::from_secs(25);
-            // Tunggu sampai counter berubah atau timeout
             while start.elapsed() < timeout {
-                if reload_counter.load(std::sync::atomic::Ordering::SeqCst) != counter {
+                if reload_counter.load(Ordering::SeqCst) != current {
                     break;
                 }
                 std::thread::sleep(std::time::Duration::from_millis(200));
@@ -468,17 +635,25 @@ pub fn start_server(output_dir: &str, port: u16) -> Result<()> {
             continue;
         }
 
-        // Serve file statis
-        if path.is_file() {
-            let content = fs::read(&path).unwrap_or_else(|_| b"File not found".to_vec());
+        // Melayani file statis
+        if file_path.is_file() {
+            let content = fs::read(&file_path).unwrap_or_else(|_| b"File not found".to_vec());
             let mut response = Response::from_data(content);
-            // Tentukan MIME type sederhana
-            if path.extension().map_or(false, |ext| ext == "html") {
-                response = response.with_header("Content-Type: text/html; charset=utf-8".parse::<Header>().unwrap());
-            } else if path.extension().map_or(false, |ext| ext == "css") {
-                response = response.with_header("Content-Type: text/css".parse().unwrap());
-            } else if path.extension().map_or(false, |ext| ext == "js") {
-                response = response.with_header("Content-Type: application/javascript".parse().unwrap());
+            if file_path.extension().map_or(false, |ext| ext == "html") {
+                response = response.with_header(
+                    "Content-Type: text/html; charset=utf-8"
+                        .parse::<Header>()
+                        .unwrap(),
+                );
+            } else if file_path.extension().map_or(false, |ext| ext == "css") {
+                response =
+                    response.with_header("Content-Type: text/css".parse::<Header>().unwrap());
+            } else if file_path.extension().map_or(false, |ext| ext == "js") {
+                response = response.with_header(
+                    "Content-Type: application/javascript"
+                        .parse::<Header>()
+                        .unwrap(),
+                );
             }
             request.respond(response).ok();
         } else {
@@ -573,6 +748,12 @@ name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
+
+[[package]]
+name = "base64"
+version = "0.21.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
 
 [[package]]
 name = "bitflags"
@@ -977,6 +1158,7 @@ name = "rawssg"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64",
  "built",
  "chrono",
  "clap",
@@ -2202,14 +2384,58 @@ input:focus-visible,
 (function () {
   "use strict";
 
-  var body = document.body;
+  /* =========================================================
+     CONSTANTS & GLOBAL REFERENCES
+     (cached on load, always checked for null)
+  ========================================================= */
+  var doc = document;
+  var body = doc.body;
+  var html = doc.documentElement;
 
-  // Hindari flash transisi tema
-  body.classList.add("no-transition");
+  // Cache semua elemen kunci (null-safe)
+  var sidebar = doc.getElementById("sidebar");
+  var sidebarToggle = doc.getElementById("sidebar-toggle");
+  var tocList = doc.getElementById("toc-list");
+  var tocToggle = doc.getElementById("toc-toggle");
+  var manToc = doc.getElementById("man-toc");
+  var contentArea = doc.getElementById("content");
+  var searchInput = doc.getElementById("search-input");
+  var searchClear = doc.getElementById("search-clear");
+  var searchResults = doc.getElementById("search-results");
+  var progressBar = doc.getElementById("progress-bar");
+  var backToTopBtn = doc.getElementById("back-to-top");
+  var helpModal = doc.getElementById("help-modal");
+  var helpClose = doc.getElementById("help-close");
+  var dateEl = doc.getElementById("date_modified");
+  var yearSpan = doc.getElementById("current-year");
 
-  /* -------------------------------------------------------
-     Utilities
-  ------------------------------------------------------- */
+  /* =========================================================
+     SANITASI & UTILITAS KEAMANAN
+  ========================================================= */
+  /**
+   * Escape HTML entities strictly to prevent XSS.
+   * Used on any user-controlled text before inserting into DOM.
+   */
+  function escapeHtml(text) {
+    if (typeof text !== "string") return "";
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  /**
+   * Safely set text content (no HTML interpretation).
+   */
+  function safeText(el, text) {
+    if (el) el.textContent = text;
+  }
+
+  /**
+   * Debounce with maximum wait protection (optional).
+   */
   function debounce(fn, delay) {
     var timer;
     return function () {
@@ -2222,10 +2448,66 @@ input:focus-visible,
     };
   }
 
-  /* -------------------------------------------------------
-     Date modified / current year
-  ------------------------------------------------------- */
-  var dateEl = document.getElementById("date_modified");
+  /* =========================================================
+     PREFERENCES & LOCAL STORAGE SAFETY
+  ========================================================= */
+  function getPref(key, fallback) {
+    try {
+      var val = localStorage.getItem(key);
+      return val !== null ? val : fallback;
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  function setPref(key, value) {
+    try {
+      localStorage.setItem(key, value);
+    } catch (e) {
+      /* quota exceeded or disabled */
+    }
+  }
+
+  function getPrefBool(key, fallback) {
+    return getPref(key, fallback ? "1" : "0") === "1";
+  }
+
+  function setPrefBool(key, value) {
+    setPref(key, value ? "1" : "0");
+  }
+
+  /* =========================================================
+     THEME (improved persistence & no flash)
+  ========================================================= */
+  function applyTheme(theme) {
+    html.classList.toggle("light", theme === "light");
+    html.setAttribute("data-theme", theme);
+    setPref("manpage-theme", theme);
+  }
+
+  function initTheme() {
+    var saved = getPref("manpage-theme", "dark");
+    applyTheme(saved);
+    // Remove no-transition after first paint to allow smooth switches later
+    window.requestAnimationFrame(function () {
+      window.requestAnimationFrame(function () {
+        body.classList.remove("no-transition");
+      });
+    });
+  }
+
+  function toggleTheme() {
+    var next = html.classList.contains("light") ? "dark" : "light";
+    applyTheme(next);
+  }
+
+  // Initial call
+  body.classList.add("no-transition");
+  initTheme();
+
+  /* =========================================================
+     DATE / CURRENT YEAR
+  ========================================================= */
   if (dateEl) {
     var months = [
       "Jan",
@@ -2249,277 +2531,318 @@ input:focus-visible,
       " " +
       now.getFullYear();
   }
-  var yearSpan = document.getElementById("current-year");
   if (yearSpan) yearSpan.textContent = new Date().getFullYear();
 
   /* =========================================================
-     THEME
+     SIDEBAR (with persistence & better a11y)
   ========================================================= */
-  function initTheme() {
-    var saved = localStorage.getItem("manpage-theme");
-    if (saved === "light") {
-      document.documentElement.classList.add("light");
-      document.documentElement.setAttribute("data-theme", "light");
-    } else {
-      document.documentElement.setAttribute("data-theme", "dark");
-    }
-    // Aktifkan transisi setelah tema diterapkan
-    window.requestAnimationFrame(function () {
-      window.requestAnimationFrame(function () {
-        body.classList.remove("no-transition");
-      });
-    });
+  var sidebarOpen = getPrefBool("sidebar-open", false);
+  function setSidebarState(open) {
+    if (sidebar) sidebar.classList.toggle("open", open);
+    if (sidebarToggle)
+      sidebarToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    setPrefBool("sidebar-open", open);
+    sidebarOpen = open;
   }
 
-  function toggleTheme() {
-    var html = document.documentElement;
-    if (html.classList.contains("light")) {
-      html.classList.remove("light");
-      html.setAttribute("data-theme", "dark");
-      localStorage.setItem("manpage-theme", "dark");
-    } else {
-      html.classList.add("light");
-      html.setAttribute("data-theme", "light");
-      localStorage.setItem("manpage-theme", "light");
-    }
-  }
-
-  initTheme();
-
-  /* =========================================================
-     SIDEBAR TOGGLE
-  ========================================================= */
-  var sidebar = document.getElementById("sidebar");
-  var sidebarToggle = document.getElementById("sidebar-toggle");
   if (sidebar && sidebarToggle) {
-    sidebarToggle.addEventListener("click", function () {
-      sidebar.classList.toggle("open");
+    // initial state
+    setSidebarState(sidebarOpen);
+
+    sidebarToggle.addEventListener("click", function (e) {
+      e.stopPropagation();
+      setSidebarState(!sidebarOpen);
     });
-    // Tutup sidebar jika klik di luar (opsional)
-    document.addEventListener("click", function (e) {
+
+    // Close on outside click (safe)
+    doc.addEventListener("click", function (e) {
       if (
+        sidebarOpen &&
         !sidebar.contains(e.target) &&
         e.target !== sidebarToggle &&
         !sidebarToggle.contains(e.target)
       ) {
-        sidebar.classList.remove("open");
+        setSidebarState(false);
+      }
+    });
+
+    // Close with Escape when sidebar has focus (or global)
+    doc.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && sidebarOpen && !helpModal.hidden) return; // help modal handles own Esc
+      if (e.key === "Escape" && sidebarOpen) {
+        setSidebarState(false);
+        sidebarToggle.focus();
       }
     });
   }
 
   /* =========================================================
-     TABLE OF CONTENTS (Auto‑generate dari h2,h3)
+     TABLE OF CONTENTS (dynamic, nested, safe, a11y enhanced)
   ========================================================= */
-  function buildTOC() {
-    var tocList = document.getElementById("toc-list");
-    var content = document.getElementById("content");
-    if (!tocList || !content) return;
+  function buildSafeTOC() {
+    if (!tocList || !contentArea) return;
 
-    var headings = content.querySelectorAll("h2, h3");
+    var headings = contentArea.querySelectorAll("h2, h3, h4");
     if (headings.length === 0) {
-      document.getElementById("toc-toggle").style.display = "none";
+      if (tocToggle) tocToggle.style.display = "none";
       return;
     }
 
+    // Generate IDs and collect
     var items = [];
-    headings.forEach(function (h, i) {
-      // Buat id jika belum ada
+    for (var i = 0; i < headings.length; i++) {
+      var h = headings[i];
       if (!h.id) {
-        h.id = "section-" + i;
+        h.id = "section-" + i + "-" + Math.random().toString(36).substr(2, 8);
       }
-      var level = h.tagName === "H2" ? 0 : 1; // 0 = top, 1 = sub
-      items.push({ level: level, text: h.textContent, id: h.id });
-    });
-
-    // Buat nested list sederhana (indentasi dengan margin)
-    var html = "";
-    var stack = [];
-    items.forEach(function (item) {
-      if (item.level === 0) {
-        html +=
-          '<li><a href="#' +
-          item.id +
-          '">' +
-          escapeHtml(item.text) +
-          "</a></li>";
-      } else {
-        // Masukkan dalam <ul> jika belum ada sublist
-        if (!html.endsWith("</ul>")) {
-          html += "<ul>";
-        }
-        html +=
-          '<li style="padding-left:1.5em;"><a href="#' +
-          item.id +
-          '">' +
-          escapeHtml(item.text) +
-          "</a></li>";
-      }
-    });
-    // Tutup sublist terakhir
-    if (html.indexOf("<ul>") !== -1 && !html.endsWith("</ul>")) {
-      html += "</ul>";
+      var level = parseInt(h.tagName.charAt(1)) || 2; // h2 -> 2, h3 -> 3, etc.
+      items.push({ level: level, text: h.textContent.trim(), id: h.id });
     }
-    tocList.innerHTML = html;
 
-    // Event listener untuk smooth scroll & active class
+    // Build nested list (max depth 3: h2,h3,h4)
+    var html = buildNestedList(items, 2);
+    tocList.innerHTML = html; // all HTML is generated from escaped text, safe
+
+    // Add anchor links to headings (clickable anchor icon)
+    addHeadingAnchors(headings);
+
+    // Click events for smooth scroll & active
     var links = tocList.querySelectorAll("a");
     links.forEach(function (link) {
       link.addEventListener("click", function (e) {
         e.preventDefault();
-        var target = document.getElementById(
-          link.getAttribute("href").substring(1),
-        );
+        var id = link.getAttribute("href").substring(1);
+        var target = doc.getElementById(id);
         if (target) {
           target.scrollIntoView({ behavior: "smooth" });
-          // Update active
-          links.forEach((l) => l.classList.remove("active"));
+          // Update active class (visual)
+          links.forEach(function (l) {
+            l.classList.remove("active");
+          });
           link.classList.add("active");
+          // Update URL hash without jump
+          if (history.pushState) {
+            history.pushState(null, "", "#" + id);
+          }
+          // Close TOC on mobile?
+          if (window.innerWidth < 768 && manToc) {
+            manToc.classList.remove("visible");
+            tocToggle.setAttribute("aria-expanded", "false");
+          }
         }
-        // Tutup TOC jika mobile? opsional
       });
     });
 
-    // Toggle TOC
-    var tocToggle = document.getElementById("toc-toggle");
-    var manToc = document.getElementById("man-toc");
-    if (tocToggle && manToc) {
+    // Toggle TOC visibility (persist state)
+    var tocVisible = getPrefBool("toc-visible", false);
+    if (manToc && tocToggle) {
+      function updateTOCVisibility(visible) {
+        manToc.classList.toggle("visible", visible);
+        tocToggle.setAttribute("aria-expanded", visible ? "true" : "false");
+        setPrefBool("toc-visible", visible);
+      }
+      updateTOCVisibility(tocVisible);
+
       tocToggle.addEventListener("click", function () {
-        var visible = manToc.classList.toggle("visible");
-        tocToggle.setAttribute("aria-expanded", visible);
+        var current = manToc.classList.contains("visible");
+        updateTOCVisibility(!current);
       });
     }
 
-    // Highligt active TOC on scroll
-    var tocAnchors = Array.from(links).map((l) =>
-      document.getElementById(l.getAttribute("href").substring(1)),
-    );
-    window.addEventListener(
-      "scroll",
-      debounce(function () {
-        var scrollPos = window.scrollY + 100;
-        var current = null;
-        for (var i = tocAnchors.length - 1; i >= 0; i--) {
-          if (tocAnchors[i] && tocAnchors[i].offsetTop <= scrollPos) {
-            current = tocAnchors[i].id;
-            break;
-          }
+    // Scroll spy: highlight active TOC item
+    var tocAnchors = [];
+    links.forEach(function (link) {
+      var id = link.getAttribute("href").substring(1);
+      var el = doc.getElementById(id);
+      if (el) tocAnchors.push({ link: link, el: el });
+    });
+
+    function updateActiveTOC() {
+      var scrollPos = window.scrollY + 100;
+      var activeLink = null;
+      // Walk backwards to find the last heading above scroll position
+      for (var i = tocAnchors.length - 1; i >= 0; i--) {
+        if (tocAnchors[i].el.offsetTop <= scrollPos) {
+          activeLink = tocAnchors[i].link;
+          break;
         }
-        links.forEach(function (link) {
-          link.classList.toggle(
-            "active",
-            link.getAttribute("href") === "#" + current,
-          );
-        });
-      }, 100),
-    );
+      }
+      links.forEach(function (l) {
+        l.classList.remove("active");
+      });
+      if (activeLink) activeLink.classList.add("active");
+    }
+
+    window.addEventListener("scroll", debounce(updateActiveTOC, 100), {
+      passive: true,
+    });
+    updateActiveTOC();
   }
 
-  function escapeHtml(text) {
-    var map = {
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#039;",
-    };
-    return text.replace(/[&<>"']/g, function (m) {
-      return map[m];
+  /**
+   * Recursively build nested <ul> from items array.
+   * Safe: all text passed through escapeHtml.
+   */
+  function buildNestedList(items, currentLevel) {
+    var html = "";
+    var i = 0;
+    while (i < items.length) {
+      var item = items[i];
+      if (item.level < currentLevel) break; // back to parent
+      if (item.level > currentLevel) {
+        // Start sublist
+        var subItems = [];
+        while (i < items.length && items[i].level > currentLevel) {
+          subItems.push(items[i]);
+          i++;
+        }
+        html += "<ul>" + buildNestedList(subItems, currentLevel + 1) + "</ul>";
+        continue;
+      }
+      // Same level
+      html +=
+        '<li><a href="#' + item.id + '">' + escapeHtml(item.text) + "</a></li>";
+      i++;
+      // If next item is deeper, it will be handled in the while loop above on next iteration
+    }
+    return html;
+  }
+
+  /**
+   * Add anchor links (🔗) to headings, copy URL on click.
+   */
+  function addHeadingAnchors(headings) {
+    headings.forEach(function (h) {
+      // Avoid duplicate anchor
+      if (h.querySelector(".heading-anchor")) return;
+
+      var anchor = doc.createElement("a");
+      anchor.href = "#" + h.id;
+      anchor.className = "heading-anchor";
+      anchor.setAttribute("aria-label", "Copy link to this heading");
+      anchor.innerHTML = '<span aria-hidden="true">🔗</span>'; // safe static HTML
+      anchor.addEventListener("click", function (e) {
+        e.preventDefault();
+        // Copy URL with hash
+        var url = window.location.href.split("#")[0] + "#" + h.id;
+        copyToClipboardSafe(url, function (success) {
+          if (success) {
+            anchor.classList.add("copied");
+            setTimeout(function () {
+              anchor.classList.remove("copied");
+            }, 2000);
+          }
+        });
+      });
+      h.appendChild(anchor);
     });
   }
 
-  buildTOC();
-
   /* =========================================================
-     CLIENT‑SIDE SEARCH (dengan highlight & navigasi)
+     CLIENT-SIDE SEARCH (safe, no ReDoS, accessible)
   ========================================================= */
-  var searchInput = document.getElementById("search-input");
-  var searchClear = document.getElementById("search-clear");
-  var searchResults = document.getElementById("search-results");
-  var contentArea = document.getElementById("content");
-
   var currentHighlightIndex = -1;
   var allHighlights = [];
 
   function clearHighlights() {
-    // Hapus semua highlight span, kembalikan teks asli
+    if (!contentArea) return;
     var highlights = contentArea.querySelectorAll(".search-highlight");
     highlights.forEach(function (span) {
       var parent = span.parentNode;
-      parent.replaceChild(document.createTextNode(span.textContent), span);
-      parent.normalize(); // gabungkan teks terpisah
+      parent.replaceChild(doc.createTextNode(span.textContent), span);
+      parent.normalize();
     });
     allHighlights = [];
     currentHighlightIndex = -1;
   }
 
+  /**
+   * Escape regex special characters safely.
+   */
+  function escapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
   function performSearch() {
+    if (!searchInput || !contentArea) return;
     clearHighlights();
     var query = searchInput.value.trim();
     if (!query) {
-      searchResults.textContent = "";
+      safeText(searchResults, "");
       return;
     }
 
-    // Regex case‑insensitive
-    var regex = new RegExp(
-      "(" + query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")",
-      "gi",
-    );
-    highlightTextNodes(contentArea, regex);
+    // Limit query length to prevent performance issues
+    if (query.length > 100) {
+      safeText(searchResults, "Query too long");
+      return;
+    }
 
-    // Kumpulkan semua highlight yang dihasilkan
+    try {
+      var escapedQuery = escapeRegExp(query);
+      var regex = new RegExp("(" + escapedQuery + ")", "gi");
+    } catch (e) {
+      safeText(searchResults, "Invalid search pattern");
+      return;
+    }
+
+    highlightTextNodes(contentArea, regex);
     allHighlights = Array.from(
       contentArea.querySelectorAll(".search-highlight"),
     );
+
     if (allHighlights.length > 0) {
-      searchResults.textContent = allHighlights.length + " matches";
+      safeText(
+        searchResults,
+        allHighlights.length +
+          " match" +
+          (allHighlights.length > 1 ? "es" : ""),
+      );
       currentHighlightIndex = 0;
       setCurrentHighlight(0);
     } else {
-      searchResults.textContent = "No matches";
+      safeText(searchResults, "No matches");
     }
   }
 
-  // Rekursif cari teks dalam node, ganti dengan span highlight
   function highlightTextNodes(node, regex) {
-    if (node.nodeType === 3) {
-      // text node
+    if (node.nodeType === Node.TEXT_NODE) {
       var text = node.textContent;
+      if (!text) return;
       var match;
       var lastIndex = 0;
-      var fragment = document.createDocumentFragment();
+      var fragment = doc.createDocumentFragment();
       regex.lastIndex = 0;
       while ((match = regex.exec(text)) !== null) {
-        // Teks sebelum match
         if (match.index > lastIndex) {
           fragment.appendChild(
-            document.createTextNode(text.substring(lastIndex, match.index)),
+            doc.createTextNode(text.substring(lastIndex, match.index)),
           );
         }
-        var span = document.createElement("span");
+        var span = doc.createElement("span");
         span.className = "search-highlight";
-        span.textContent = match[0];
+        span.textContent = match[0]; // safe, uses textContent
         fragment.appendChild(span);
         lastIndex = regex.lastIndex;
-        if (match[0].length === 0) regex.lastIndex++; // hindari infinite loop
+        if (match[0].length === 0) {
+          regex.lastIndex++; // avoid infinite loop on zero-length match
+        }
       }
-      // Sisa teks
       if (lastIndex < text.length) {
-        fragment.appendChild(
-          document.createTextNode(text.substring(lastIndex)),
-        );
+        fragment.appendChild(doc.createTextNode(text.substring(lastIndex)));
       }
-      if (fragment.childNodes.length > 0) {
+      if (fragment.childNodes.length > 0 && node.parentNode) {
         node.parentNode.replaceChild(fragment, node);
       }
     } else if (
-      node.nodeType === 1 &&
-      !/(script|style|textarea|select|button|code)/i.test(node.tagName)
+      node.nodeType === Node.ELEMENT_NODE &&
+      !/^(script|style|textarea|select|button|code|noscript)$/i.test(
+        node.tagName,
+      )
     ) {
-      // Hindari modifikasi di dalam script/style/textarea dll.
-      // Juga hindari highlight ulang span yang sudah ada
+      // Skip highlight inside these tags and our own highlights
       if (node.classList.contains("search-highlight")) return;
-      // Rekursi ke anak-anak (harus static NodeList agar tidak berubah saat modifikasi)
+      // Use static NodeList to avoid live modification issues
       var children = Array.from(node.childNodes);
       children.forEach(function (child) {
         highlightTextNodes(child, regex);
@@ -2531,7 +2854,7 @@ input:focus-visible,
     allHighlights.forEach(function (span, i) {
       span.classList.toggle("current", i === index);
     });
-    if (allHighlights.length > 0) {
+    if (allHighlights.length > 0 && allHighlights[index]) {
       allHighlights[index].scrollIntoView({
         behavior: "smooth",
         block: "center",
@@ -2554,50 +2877,84 @@ input:focus-visible,
     searchInput.addEventListener("keydown", function (e) {
       if (e.key === "Enter") {
         e.preventDefault();
-        if (e.shiftKey) {
-          navigateHighlights(-1);
-        } else {
-          navigateHighlights(1);
-        }
+        navigateHighlights(e.shiftKey ? -1 : 1);
       } else if (e.key === "Escape") {
         clearHighlights();
         searchInput.value = "";
-        searchResults.textContent = "";
+        safeText(searchResults, "");
       }
     });
-    searchClear.addEventListener("click", function () {
-      searchInput.value = "";
-      clearHighlights();
-      searchResults.textContent = "";
-      searchInput.focus();
-    });
+    if (searchClear) {
+      searchClear.addEventListener("click", function () {
+        searchInput.value = "";
+        clearHighlights();
+        safeText(searchResults, "");
+        searchInput.focus();
+      });
+    }
   }
 
   /* =========================================================
-     COPY BUTTONS
+     COPY HELPER (safe clipboard & fallback)
+  ========================================================= */
+  function copyToClipboardSafe(text, callback) {
+    if (!navigator.clipboard || !navigator.clipboard.writeText) {
+      fallbackCopyText(text, callback);
+      return;
+    }
+    navigator.clipboard
+      .writeText(text)
+      .then(function () {
+        if (callback) callback(true);
+      })
+      .catch(function () {
+        fallbackCopyText(text, callback);
+      });
+  }
+
+  function fallbackCopyText(text, callback) {
+    var textarea = doc.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    body.appendChild(textarea);
+    textarea.select();
+    textarea.setSelectionRange(0, 999999); // mobile
+    var success = false;
+    try {
+      success = doc.execCommand("copy");
+    } catch (e) {}
+    body.removeChild(textarea);
+    if (callback) callback(!!success);
+  }
+
+  /* =========================================================
+     ENHANCE COPY BUTTONS for code blocks
   ========================================================= */
   function enhanceCopyButtons() {
-    var pres = document.querySelectorAll(".content pre");
+    if (!contentArea) return;
+    var pres = contentArea.querySelectorAll("pre");
     for (var i = 0; i < pres.length; i++) {
       var pre = pres[i];
       if (pre.closest(".code-block")) continue;
 
-      var wrapper = document.createElement("div");
+      var wrapper = doc.createElement("div");
       wrapper.className = "code-block";
       pre.parentNode.insertBefore(wrapper, pre);
       wrapper.appendChild(pre);
 
-      var btn = document.createElement("button");
+      var btn = doc.createElement("button");
       btn.className = "copy-btn";
       btn.type = "button";
       btn.setAttribute("aria-label", "Copy code to clipboard");
 
-      var label = document.createElement("span");
+      var label = doc.createElement("span");
       label.className = "copy-label";
       label.textContent = "Copy";
       btn.appendChild(label);
 
-      var check = document.createElement("span");
+      var check = doc.createElement("span");
       check.className = "copy-check";
       check.setAttribute("aria-hidden", "true");
       check.textContent = "✓";
@@ -2609,90 +2966,50 @@ input:focus-visible,
           return function () {
             var codeEl = preEl.querySelector("code");
             var code = codeEl ? codeEl.textContent : preEl.textContent;
-            copyToClipboard(code, btnEl, labelEl);
+            copyToClipboardSafe(code, function (success) {
+              if (success) {
+                btnEl.classList.add("copied");
+                btnEl.setAttribute("aria-label", "Copied to clipboard");
+                labelEl.textContent = "Copied";
+                setTimeout(function () {
+                  btnEl.classList.remove("copied");
+                  btnEl.setAttribute("aria-label", "Copy code to clipboard");
+                  labelEl.textContent = "Copy";
+                }, 2000);
+              } else {
+                labelEl.textContent = "Select & copy";
+                setTimeout(function () {
+                  labelEl.textContent = "Copy";
+                }, 3000);
+              }
+            });
           };
         })(pre, btn, label),
       );
 
       wrapper.appendChild(btn);
 
+      // Show button permanently on touch devices
       if ("ontouchstart" in window) {
         btn.classList.add("visible");
       }
     }
   }
 
-  function copyToClipboard(text, btn, labelEl) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard
-        .writeText(text)
-        .then(function () {
-          indicateCopySuccess(btn, labelEl);
-        })
-        .catch(function () {
-          fallbackCopy(text, btn, labelEl);
-        });
-    } else {
-      fallbackCopy(text, btn, labelEl);
-    }
-  }
-
-  function fallbackCopy(text, btn, labelEl) {
-    var textarea = document.createElement("textarea");
-    textarea.value = text;
-    textarea.setAttribute("readonly", "");
-    textarea.style.position = "fixed";
-    textarea.style.opacity = "0";
-    document.body.appendChild(textarea);
-    textarea.select();
-    textarea.setSelectionRange(0, textarea.value.length);
-    var succeeded = false;
-    try {
-      succeeded = document.execCommand("copy");
-    } catch (e) {}
-    document.body.removeChild(textarea);
-    if (succeeded) {
-      indicateCopySuccess(btn, labelEl);
-    } else {
-      labelEl.textContent = "Select & copy manually";
-      btn.setAttribute(
-        "aria-label",
-        "Copy failed, please select and copy the code manually",
-      );
-      setTimeout(function () {
-        labelEl.textContent = "Copy";
-        btn.setAttribute("aria-label", "Copy code to clipboard");
-      }, 3000);
-    }
-  }
-
-  function indicateCopySuccess(btn, labelEl) {
-    btn.classList.add("copied");
-    btn.setAttribute("aria-label", "Copied to clipboard");
-    labelEl.textContent = "Copied";
-    setTimeout(function () {
-      btn.classList.remove("copied");
-      btn.setAttribute("aria-label", "Copy code to clipboard");
-      labelEl.textContent = "Copy";
-    }, 2000);
-  }
-
-  enhanceCopyButtons();
-
   /* =========================================================
-     SCROLL UI: progress bar + back‑to‑top
+     PROGRESS BAR & BACK-TO-TOP
   ========================================================= */
-  var backToTopBtn = document.getElementById("back-to-top");
-  var progressBar = document.getElementById("progress-bar");
   var scrollTicking = false;
-
   function updateScrollUI() {
     var scrollTop = window.scrollY;
     if (progressBar) {
-      var docHeight =
-        document.documentElement.scrollHeight - window.innerHeight;
-      var scrolled = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+      var docHeight = Math.max(
+        doc.documentElement.scrollHeight - window.innerHeight,
+        1,
+      );
+      var scrolled = Math.min((scrollTop / docHeight) * 100, 100);
       progressBar.style.width = scrolled + "%";
+      progressBar.setAttribute("aria-valuenow", Math.floor(scrolled));
     }
     if (backToTopBtn) {
       backToTopBtn.classList.toggle("visible", scrollTop > 300);
@@ -2703,7 +3020,7 @@ input:focus-visible,
   function onScroll() {
     if (!scrollTicking) {
       scrollTicking = true;
-      window.requestAnimationFrame(updateScrollUI);
+      requestAnimationFrame(updateScrollUI);
     }
   }
 
@@ -2720,94 +3037,107 @@ input:focus-visible,
   }
 
   /* =========================================================
-     TYPEWRITER EFFECT
+     READING TIME ESTIMATOR
   ========================================================= */
-  var synopsis = document.querySelector(".synopsis[data-typewriter]");
-  var prefersReducedMotion =
-    window.matchMedia &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function showReadingTime() {
+    if (!contentArea) return;
+    var text = contentArea.textContent || "";
+    var wordCount = text.trim().split(/\s+/).length;
+    var minutes = Math.max(1, Math.ceil(wordCount / 200)); // avg 200 wpm
+    var metaDiv = doc.querySelector(".meta");
+    if (metaDiv) {
+      var p = doc.createElement("p");
+      p.innerHTML = "<strong>Reading time</strong> ~" + minutes + " min";
+      metaDiv.appendChild(p);
+    }
+  }
+
+  /* =========================================================
+     TYPEWRITER EFFECT (with reduced motion respect)
+  ========================================================= */
+  var synopsis = doc.querySelector(".synopsis[data-typewriter]");
+  var prefersReducedMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)",
+  ).matches;
+  var typewriterActive = false;
+  var typeIndex = 0;
+  var typeInterval = null;
+
+  function startTypewriter(text) {
+    if (!synopsis) return;
+    typeIndex = 0;
+    synopsis.textContent = "";
+    typewriterActive = true;
+    typeInterval = setInterval(function () {
+      typeIndex++;
+      synopsis.textContent = text.substring(0, typeIndex);
+      if (typeIndex >= text.length) {
+        clearInterval(typeInterval);
+        typewriterActive = false;
+      }
+    }, 30);
+  }
+
+  function stopTypewriter() {
+    clearInterval(typeInterval);
+    typewriterActive = false;
+  }
 
   if (synopsis) {
     var originalText = synopsis.getAttribute("data-typewriter") || "";
-    var typeIndex = 0;
-    var isTyping = false;
-    var typeInterval = null;
-
-    function typeStep() {
-      typeIndex++;
-      synopsis.textContent = originalText.substring(0, typeIndex);
-      if (typeIndex >= originalText.length) {
-        clearInterval(typeInterval);
-        isTyping = false;
-      }
-    }
-
-    function playTyping() {
-      isTyping = true;
-      typeInterval = setInterval(typeStep, 30);
-    }
-
-    function pauseTyping() {
-      clearInterval(typeInterval);
-      isTyping = false;
-    }
-
     if (prefersReducedMotion) {
       synopsis.textContent = originalText;
-      typeIndex = originalText.length;
     } else {
-      synopsis.textContent = "";
-      playTyping();
+      startTypewriter(originalText);
     }
 
     window.toggleTypewriterEffect = function () {
-      if (isTyping) {
-        pauseTyping();
+      if (typewriterActive) {
+        stopTypewriter();
       } else if (typeIndex >= originalText.length) {
-        typeIndex = 0;
-        synopsis.textContent = "";
-        playTyping();
+        startTypewriter(originalText);
       } else {
-        playTyping();
+        // Resume
+        startTypewriter(originalText);
       }
     };
   }
 
   /* =========================================================
-     HELP MODAL (focus trap)
+     HELP MODAL (focus trap, a11y)
   ========================================================= */
-  var helpModal = document.getElementById("help-modal");
-  var helpClose = document.getElementById("help-close");
   var lastFocusedBeforeModal = null;
 
-  function getFocusableInModal() {
-    if (!helpModal) return [];
+  function getFocusableIn(el) {
     var selector =
       'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
-    return Array.prototype.slice.call(helpModal.querySelectorAll(selector));
+    return Array.from(el.querySelectorAll(selector));
   }
 
   function trapTabKey(e) {
-    if (e.key !== "Tab") return;
-    var focusable = getFocusableInModal();
-    if (focusable.length === 0) return;
+    if (e.key !== "Tab" || !helpModal) return;
+    var focusable = getFocusableIn(helpModal);
+    if (focusable.length === 0) {
+      e.preventDefault();
+      return;
+    }
     var first = focusable[0];
     var last = focusable[focusable.length - 1];
-    if (e.shiftKey && document.activeElement === first) {
+    if (e.shiftKey && doc.activeElement === first) {
       e.preventDefault();
       last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
+    } else if (!e.shiftKey && doc.activeElement === last) {
       e.preventDefault();
       first.focus();
     }
   }
 
   function showHelp() {
-    if (!helpModal) return;
-    lastFocusedBeforeModal = document.activeElement;
+    if (!helpModal || !helpModal.hidden) return;
+    lastFocusedBeforeModal = doc.activeElement;
     helpModal.hidden = false;
     helpModal.addEventListener("keydown", trapTabKey);
-    var focusable = getFocusableInModal();
+    var focusable = getFocusableIn(helpModal);
     if (focusable.length > 0) {
       focusable[0].focus();
     } else {
@@ -2829,15 +3159,9 @@ input:focus-visible,
     lastFocusedBeforeModal = null;
   }
 
-  function toggleHelp() {
-    if (!helpModal) return;
-    if (helpModal.hidden) showHelp();
-    else hideHelp();
-  }
-
   if (helpModal) {
     helpModal.addEventListener("click", function (e) {
-      if (e.target === e.currentTarget) hideHelp();
+      if (e.target === helpModal) hideHelp();
     });
   }
   if (helpClose) {
@@ -2845,21 +3169,37 @@ input:focus-visible,
   }
 
   /* =========================================================
-     KEYBOARD SHORTCUTS
+     READING POSITION MEMORY (session)
   ========================================================= */
-  document.addEventListener("keydown", function (e) {
-    var targetTag = e.target.tagName;
-    if (
-      targetTag === "INPUT" ||
-      targetTag === "TEXTAREA" ||
-      e.target.isContentEditable
-    ) {
-      // Izinkan Escape dan ? untuk input search (kita tangani di search)
-      if (e.key === "Escape" || e.key === "?") {
-        // tidak return, biarkan switch handle
-      } else {
-        return;
-      }
+  (function () {
+    var scrollKey = "scroll-pos-" + window.location.pathname;
+    var savedScroll = sessionStorage.getItem(scrollKey);
+    if (savedScroll) {
+      // Restore after TOC built
+      window.addEventListener("load", function () {
+        var top = parseInt(savedScroll, 10);
+        if (!isNaN(top) && top > 0) {
+          window.scrollTo({ top: top });
+        }
+      });
+    }
+    window.addEventListener("beforeunload", function () {
+      sessionStorage.setItem(scrollKey, window.scrollY);
+    });
+  })();
+
+  /* =========================================================
+     KEYBOARD SHORTCUTS (extended, safe)
+  ========================================================= */
+  doc.addEventListener("keydown", function (e) {
+    var target = e.target;
+    var tag = target.tagName;
+    var isEditable =
+      tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable;
+
+    // Always allow Escape and ? even in inputs
+    if (isEditable && e.key !== "Escape" && e.key !== "?" && e.key !== "m") {
+      return;
     }
     if (e.ctrlKey || e.altKey || e.metaKey) return;
 
@@ -2879,7 +3219,7 @@ input:focus-visible,
         break;
       case "G":
         window.scrollTo({
-          top: document.documentElement.scrollHeight,
+          top: doc.documentElement.scrollHeight,
           behavior: "smooth",
         });
         break;
@@ -2895,7 +3235,6 @@ input:focus-visible,
         }
         break;
       case "s":
-        // Fokus search
         if (searchInput) {
           e.preventDefault();
           searchInput.focus();
@@ -2903,7 +3242,8 @@ input:focus-visible,
         }
         break;
       case "?":
-        toggleHelp();
+        e.preventDefault();
+        showHelp();
         break;
       case "Escape":
         if (helpModal && !helpModal.hidden) {
@@ -2913,14 +3253,83 @@ input:focus-visible,
           if (searchInput) {
             searchInput.value = "";
             clearHighlights();
-            searchResults.textContent = "";
+            safeText(searchResults, "");
           }
+          if (sidebarOpen) setSidebarState(false);
         }
+        break;
+      case "m":
+        // Toggle sidebar
+        if (sidebar) {
+          setSidebarState(!sidebarOpen);
+        }
+        break;
+      case "y":
+        // Yank URL to clipboard
+        e.preventDefault();
+        copyToClipboardSafe(window.location.href, function (success) {
+          // Optional brief feedback
+          if (success) console.log("URL copied: " + window.location.href);
+        });
+        break;
+      case "[":
+        // Previous heading
+        e.preventDefault();
+        navigateHeadings(-1);
+        break;
+      case "]":
+        // Next heading
+        e.preventDefault();
+        navigateHeadings(1);
         break;
       default:
         break;
     }
   });
+
+  function navigateHeadings(direction) {
+    if (!contentArea) return;
+    var headings = Array.from(contentArea.querySelectorAll("h2, h3, h4"));
+    if (headings.length === 0) return;
+    var scrollY = window.scrollY + (direction > 0 ? 10 : -10);
+    var currentIndex = -1;
+    // Find the heading closest to current position
+    for (var i = 0; i < headings.length; i++) {
+      if (direction > 0 && headings[i].offsetTop > scrollY) {
+        currentIndex = i;
+        break;
+      } else if (direction < 0 && headings[i].offsetTop >= scrollY) {
+        currentIndex = i - 1;
+        break;
+      }
+    }
+    if (direction > 0 && currentIndex === -1)
+      currentIndex = headings.length - 1;
+    if (direction < 0 && currentIndex < 0) currentIndex = 0;
+    if (headings[currentIndex]) {
+      headings[currentIndex].scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }
+
+  /* =========================================================
+     INITIALISE EVERYTHING
+  ========================================================= */
+  buildSafeTOC();
+  enhanceCopyButtons();
+  showReadingTime();
+
+  // Prevent accidental zoom on double-tap (optional)
+  doc.addEventListener(
+    "dblclick",
+    function (e) {
+      if (e.target.closest && e.target.closest("button, a, input")) return;
+      e.preventDefault();
+    },
+    { passive: false },
+  );
 })();
 ```
 ## ./templates/index.html
@@ -2933,14 +3342,15 @@ input:focus-visible,
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="{{ desc }}" />
     <title>{{ title }}</title>
-
+    {{ favicon }}
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400;1,500&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css" />
+    <!-- Ganti path statis dengan placeholder base_path -->
+    <link rel="stylesheet" href="{{ base_path }}styles.css" />
   </head>
   <body data-terminal="full">
     <div
@@ -2956,7 +3366,6 @@ input:focus-visible,
 
     {{ navbar }}
 
-    <!-- Sidebar dengan tombol toggle -->
     <button
       class="sidebar-toggle"
       id="sidebar-toggle"
@@ -2996,7 +3405,6 @@ input:focus-visible,
           <p><strong>Date Modified</strong> <span id="date_modified"></span></p>
         </div>
 
-        <!-- Search & TOC -->
         <div class="page-tools" id="page-tools">
           <div class="term-search">
             <span class="search-prompt" aria-hidden="true"
@@ -3093,7 +3501,8 @@ input:focus-visible,
       </p>
     </noscript>
 
-    <script src="./script.js"></script>
+    <!-- Ganti path statis dengan placeholder base_path -->
+    <script src="{{ base_path }}script.js"></script>
   </body>
 </html>
 ```
@@ -3175,12 +3584,2220 @@ Minimal blog content here.
 ## ./build.rs
 
 ```rust
+use std::process::Command;
+
 fn main() {
+    // Tanggal & jam build
     let now = chrono::Local::now();
-    println!("cargo:rustc-env=BUILD_DATE={}", now.format("%Y-%m-%d %H:%M:%S"));
-    println!("cargo:rustc-env=PROFILE={}", std::env::var("PROFILE").unwrap());
-    println!("cargo:rustc-env=TARGET={}", std::env::var("TARGET").unwrap());
+    println!(
+        "cargo:rustc-env=BUILD_DATE={}",
+        now.format("%Y-%m-%d %H:%M:%S")
+    );
+
+    // Profil & target dari Cargo
+    println!(
+        "cargo:rustc-env=PROFILE={}",
+        std::env::var("PROFILE").unwrap()
+    );
+    println!(
+        "cargo:rustc-env=TARGET={}",
+        std::env::var("TARGET").unwrap()
+    );
+
+    // Versi compiler Rust
+    let rustc_version = Command::new("rustc")
+        .arg("--version")
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|_| "unknown".into());
+    println!("cargo:rustc-env=RUST_VERSION={}", rustc_version);
+
+    // Informasi Git
+    let git_hash = Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|_| "unknown".into());
+    println!("cargo:rustc-env=GIT_HASH={}", git_hash);
+
+    let git_branch = Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|_| "unknown".into());
+    println!("cargo:rustc-env=GIT_BRANCH={}", git_branch);
+
+    let dirty = Command::new("git")
+        .args(["diff-index", "--quiet", "HEAD", "--"])
+        .status()
+        .map(|s| !s.success())
+        .unwrap_or(false);
+    println!("cargo:rustc-env=GIT_DIRTY={}", if dirty { "yes" } else { "no" });
+
+    // Rebuild hanya jika file ini atau HEAD berubah
+    println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=.git/HEAD");
 }
+```
+## ./Makefile
+
+```
+# Makefile for rawssg - Static site generator with terminal vibes
+# Usage:
+#   make                build release binary
+#   make debug          build debug binary
+#   make run            build and run with default args
+#   make check          check code without building
+#   make test           run tests
+#   make clean          remove build artifacts
+#   make install        install binary to /usr/local/bin (requires sudo)
+#   make uninstall      remove installed binary
+#   make fmt            format code
+#   make lint           run clippy lints
+#   make watch          auto-build on file changes (requires cargo-watch)
+#   make help           show this help
+
+# ---------- Configuration ----------
+BINARY_NAME := rawssg
+CARGO := cargo
+TARGET_DIR := target
+RELEASE_FLAGS := --release
+DEBUG_FLAGS :=
+INSTALL_DIR := /usr/local/bin
+
+# ---------- Default target ----------
+.PHONY: all
+all: release
+
+# ---------- Build targets ----------
+.PHONY: debug release build
+debug:
+	$(CARGO) build $(DEBUG_FLAGS)
+
+release:
+	$(CARGO) build $(RELEASE_FLAGS)
+
+build: release
+
+# ---------- Run targets ----------
+.PHONY: run run-release
+run: debug
+	./$(TARGET_DIR)/debug/$(BINARY_NAME) help
+
+run-release: release
+	./$(TARGET_DIR)/release/$(BINARY_NAME) help
+
+# ---------- Code quality ----------
+.PHONY: check test fmt lint
+check:
+	$(CARGO) check
+
+test:
+	$(CARGO) test
+
+fmt:
+	$(CARGO) fmt
+
+lint:
+	$(CARGO) clippy -- -D warnings
+
+# ---------- Cleanup ----------
+.PHONY: clean distclean
+clean:
+	$(CARGO) clean
+
+distclean:
+	$(CARGO) clean
+	rm -rf dist content config.yaml
+
+# ---------- Install / uninstall ----------
+.PHONY: install uninstall
+install: release
+	@echo "Installing $(BINARY_NAME) to $(INSTALL_DIR)..."
+	sudo cp "$(TARGET_DIR)/release/$(BINARY_NAME)" "$(INSTALL_DIR)/"
+	@echo "Done."
+
+uninstall:
+	@echo "Removing $(BINARY_NAME) from $(INSTALL_DIR)..."
+	sudo rm -f "$(INSTALL_DIR)/$(BINARY_NAME)"
+	@echo "Done."
+
+# ---------- Watch mode (auto rebuild) ----------
+.PHONY: watch
+watch:
+	@command -v cargo-watch >/dev/null 2>&1 || { \
+		echo "cargo-watch not found, installing..."; \
+		cargo install cargo-watch; \
+	}
+	cargo watch -x check -x build
+
+# ---------- Extended utilities ----------
+# Build for a specific target (e.g., make target=x86_64-unknown-linux-gnu)
+.PHONY: target
+target:
+	@[ "${target}" ] || ( echo "Usage: make target target=<triple>"; exit 1 )
+	$(CARGO) build $(RELEASE_FLAGS) --target $(target)
+
+# ---------- Project-specific helpers ----------
+# These use "cargo run --" to execute the built binary commands.
+.PHONY: init-homepage init-blog config-check config-init config-show compile serve help-rawssg
+
+init-homepage:
+	$(CARGO) run -- init homepage
+
+init-blog:
+	$(CARGO) run -- init blog
+
+config-check:
+	$(CARGO) run -- config check
+
+config-init:
+	$(CARGO) run -- config init
+
+config-show:
+	$(CARGO) run -- config show
+
+compile:
+	$(CARGO) run -- compile
+
+serve:
+	$(CARGO) run -- serve
+
+# Show the help from rawssg itself
+help-rawssg:
+	$(CARGO) run -- help
+
+# ---------- Help ----------
+.PHONY: help
+help:
+	@echo "Usage: make [target]"
+	@echo ""
+	@echo "Common targets:"
+	@echo "  debug          Build debug binary"
+	@echo "  release        Build release binary (default)"
+	@echo "  run            Run debug binary with 'help' command"
+	@echo "  check          Check code (fast, no binary)"
+	@echo "  test           Run tests"
+	@echo "  clean          Remove build artifacts"
+	@echo "  fmt            Format code"
+	@echo "  lint           Run clippy"
+	@echo "  watch          Auto-build on changes (needs cargo-watch)"
+	@echo "  install        Install to /usr/local/bin"
+	@echo "  uninstall      Remove from /usr/local/bin"
+	@echo "  distclean      Clean everything including generated content"
+	@echo ""
+	@echo "Project tasks (via cargo run):"
+	@echo "  init-homepage  Scaffold a homepage project"
+	@echo "  init-blog      Scaffold a blog project"
+	@echo "  config-check   Validate config and markdown"
+	@echo "  config-init    Create default config.yaml"
+	@echo "  config-show    Display current config"
+	@echo "  compile        Build site (default content/ -> dist/)"
+	@echo "  serve          Start dev server with live-reload"
+	@echo "  help-rawssg    Show rawssg's own help"
+	@echo ""
+	@echo "Advanced:"
+	@echo "  target=<triple>        Build for specific target"
+	@echo ""
+	@echo "Examples:"
+	@echo "  make"
+	@echo "  make debug run"
+	@echo "  make serve"
+	@echo "  make clean release"
+```
+## ./docs/content/first-post.md
+
+```markdown
+---
+title: "My First Blog"
+desc: "Starting a simple blog"
+author: "Your Name"
+repo_url: "https://github.com/username/repo"
+license: "MIT"
+footer: "Powered by rawssg"
+---
+
+## Hello Blog
+
+Minimal blog content here.
+```
+## ./docs/config.yaml
+
+```yaml
+navbar:
+  - label: Home
+    url: index.html
+sidebar: []
+```
+## ./docs/dist/styles.css
+
+```css
+/* =========================================================
+   Manpage Terminal Template – styles.css
+   Full‑featured, accessible, responsive, with sidebar &
+   search. Works with rawssg placeholders.
+   ========================================================= */
+
+:root {
+  --bg: #0a0a0a;
+  --text: #b0b0b0;
+  --muted: #777;
+  --heading: #e5e5e5;
+  --accent: #8be9fd;
+  --accent-hover: #ffffff;
+  --border: #2a2a2a;
+  --code-bg: #141414;
+  --pre-bg: #0d0d0d;
+  --pre-border: #2e2e2e;
+  --meta-label: #d0d0d0;
+  --synopsis-color: #999;
+  --blockquote-bg: #111;
+  --blockquote-text: #aaa;
+  --button-muted: #666;
+  --progress-bg: rgba(139, 233, 253, 0.3);
+  --toc-bg: rgba(10, 10, 10, 0.97);
+  --search-bg: #0f0f0f;
+  --term-success: #50fa7b;
+  --term-error: #ff5555;
+  --term-warning: #f1fa8c;
+  --strong-color: #e8e8e8;
+  --em-color: #cccccc;
+  --code-text: #c5c8c6;
+  --pre-text: #c0c0c0;
+  --table-header-bg: #0f0f0f;
+  --overlay-bg: rgba(0, 0, 0, 0.8);
+  --focus-ring: var(--accent);
+  --sidebar-width: 220px;
+  --transition: 0.2s ease;
+}
+
+[data-theme="light"],
+html.light {
+  --bg: #f5f5f0;
+  --text: #333;
+  --muted: #666;
+  --heading: #111;
+  --accent: #0066cc;
+  --accent-hover: #004499;
+  --border: #ccc;
+  --code-bg: #e8e8e8;
+  --pre-bg: #f0f0f0;
+  --pre-border: #ccc;
+  --meta-label: #222;
+  --synopsis-color: #555;
+  --blockquote-bg: #eee;
+  --blockquote-text: #444;
+  --button-muted: #888;
+  --progress-bg: rgba(0, 102, 204, 0.3);
+  --toc-bg: rgba(245, 245, 240, 0.97);
+  --search-bg: #fafaf5;
+  --strong-color: #111;
+  --em-color: #333;
+  --code-text: #1f2937;
+  --pre-text: #222;
+  --table-header-bg: #eaeaea;
+  --overlay-bg: rgba(0, 0, 0, 0.5);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: "JetBrains Mono", "IBM Plex Mono", "Fira Code", monospace;
+  line-height: 1.7;
+  padding: 2rem 1.5rem;
+  min-height: 100vh;
+  transition:
+    background-color var(--transition),
+    color var(--transition);
+  position: relative;
+}
+
+body.no-transition,
+body.no-transition * {
+  transition: none !important;
+}
+
+/* ---------- Skip link ---------- */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 0;
+  background: var(--accent);
+  color: #000;
+  padding: 0.5rem 1rem;
+  z-index: 100;
+  text-decoration: none;
+}
+.skip-link:focus {
+  top: 0;
+}
+
+/* ---------- Progress bar ---------- */
+.progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  background: var(--progress-bg);
+  width: 0;
+  z-index: 99;
+  transition: width 0.1s linear;
+}
+
+/* ---------- Navbar (dari rawssg) ---------- */
+.top-nav {
+  max-width: 56rem;
+  margin: 0 auto 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.top-nav ul {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+.top-nav a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--transition);
+}
+.top-nav a:hover {
+  border-bottom-color: var(--accent);
+}
+
+/* ---------- Sidebar ---------- */
+.sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: var(--sidebar-width);
+  height: 100vh;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  padding: 2rem 1rem;
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+  z-index: 90;
+  overflow-y: auto;
+}
+.sidebar.open {
+  transform: translateX(0);
+}
+.sidebar ul {
+  list-style: none;
+  padding: 0;
+  margin-top: 1rem;
+}
+.sidebar li {
+  margin-bottom: 0.8rem;
+}
+.sidebar a {
+  color: var(--text);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition:
+    color var(--transition),
+    border-color var(--transition);
+}
+.sidebar a:hover,
+.sidebar a.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.sidebar-toggle {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  font-size: 1.4rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  cursor: pointer;
+  z-index: 91;
+  display: none; /* muncul hanya di layar kecil */
+}
+
+@media (max-width: 850px) {
+  .sidebar {
+    width: 100%;
+    max-width: 300px;
+  }
+  .sidebar-toggle {
+    display: block;
+  }
+}
+
+/* ---------- Layout utama ---------- */
+.manpage {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 2rem 0;
+  position: relative;
+}
+
+.ascii-decor {
+  color: var(--border);
+  font-size: 0.9rem;
+  text-align: center;
+  margin-bottom: 1rem;
+  user-select: none;
+}
+
+.title {
+  font-size: clamp(2rem, 5vw, 2.8rem);
+  font-weight: 700;
+  color: var(--heading);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  margin-bottom: 1rem;
+}
+
+.blinking-cursor {
+  color: var(--accent);
+  animation: blink 1s step-end infinite;
+  margin-left: 2px;
+  font-weight: 400;
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.synopsis {
+  font-style: italic;
+  color: var(--synopsis-color);
+  margin-bottom: 1.5rem;
+  line-height: 1.6;
+  min-height: 1.6em;
+}
+
+.separator {
+  border: 0;
+  height: 1px;
+  background: var(--border);
+  margin: 1.5rem 0 2rem;
+}
+
+.meta p {
+  display: flex;
+  align-items: baseline;
+  margin-bottom: 0.4rem;
+  font-size: 0.95rem;
+}
+.meta strong {
+  display: inline-block;
+  min-width: 10rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  color: var(--meta-label);
+  font-size: 0.9rem;
+}
+
+.repo-link {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--accent);
+  transition:
+    color var(--transition),
+    border-color var(--transition);
+}
+.repo-link:hover {
+  color: var(--accent-hover);
+  border-bottom-color: var(--accent-hover);
+}
+
+/* ---------- Page tools (search & TOC) ---------- */
+.page-tools {
+  margin: 2rem 0 1rem;
+}
+.term-search {
+  display: flex;
+  align-items: center;
+  background: var(--search-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.4rem 0.8rem;
+  margin-bottom: 1rem;
+  opacity: 0.9;
+  transition: opacity var(--transition);
+}
+.term-search:hover {
+  opacity: 1;
+}
+.search-prompt {
+  color: var(--accent);
+  margin-right: 0.5rem;
+  white-space: nowrap;
+  font-weight: 500;
+  user-select: none;
+}
+#search-input {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.95rem;
+  flex: 1;
+  outline: none;
+  padding: 0.2rem 0;
+}
+#search-input::placeholder {
+  color: var(--muted);
+  font-style: italic;
+}
+.search-results {
+  color: var(--muted);
+  margin-left: 0.5rem;
+  white-space: nowrap;
+}
+.search-clear {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0 0.3rem;
+  transition: color var(--transition);
+}
+.search-clear:hover {
+  color: var(--accent);
+}
+
+/* Highlight */
+.search-highlight {
+  background: rgba(139, 233, 253, 0.35);
+  color: var(--heading);
+  border-radius: 2px;
+  padding: 0 0.1em;
+}
+.search-highlight.current {
+  background: var(--accent);
+  color: #000;
+  border-radius: 2px;
+}
+
+/* TOC */
+.toc-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.8rem;
+  border-radius: 3px;
+  cursor: pointer;
+  margin-bottom: 0.8rem;
+  transition: background var(--transition);
+}
+.toc-toggle:hover {
+  background: var(--code-bg);
+}
+.man-toc {
+  background: var(--toc-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1rem;
+  max-height: 60vh;
+  overflow-y: auto;
+  font-size: 0.9rem;
+  display: none;
+  backdrop-filter: blur(5px);
+}
+.man-toc.visible {
+  display: block;
+}
+.man-toc ul {
+  list-style: none;
+  padding-left: 0;
+}
+.man-toc li {
+  margin-bottom: 0.4rem;
+}
+.man-toc a {
+  color: var(--text);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition:
+    border-color var(--transition),
+    color var(--transition);
+}
+.man-toc a:hover,
+.man-toc a.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* ---------- Content (markdown) ---------- */
+.content {
+  margin-top: 2rem;
+  line-height: 1.8;
+}
+.content > * + * {
+  margin-top: 1.5rem;
+}
+.content h1,
+.content h2,
+.content h3,
+.content h4,
+.content h5,
+.content h6 {
+  color: var(--heading);
+  font-weight: 700;
+  margin-top: 2.5rem;
+  margin-bottom: 0.75rem;
+  line-height: 1.3;
+  scroll-margin-top: 2rem; /* for anchor scroll */
+}
+.content h1 {
+  font-size: 1.9rem;
+}
+.content h2 {
+  font-size: 1.6rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.35rem;
+}
+.content h3 {
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+.content h4 {
+  font-size: 1.1rem;
+  font-style: italic;
+}
+.content h5 {
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.content h6 {
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.content p {
+  margin-bottom: 1.2rem;
+}
+.content strong,
+.content b {
+  color: var(--strong-color);
+  font-weight: 600;
+}
+.content em,
+.content i {
+  color: var(--em-color);
+}
+.content del {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+.content a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--accent);
+  transition:
+    color var(--transition),
+    border-color var(--transition);
+}
+.content a:hover {
+  color: var(--accent-hover);
+  border-bottom-color: var(--accent-hover);
+}
+.content ul,
+.content ol {
+  padding-left: 2rem;
+  list-style: none;
+  margin-bottom: 1.2rem;
+}
+.content li {
+  position: relative;
+  padding-left: 1.5em;
+  margin-bottom: 0.5rem;
+}
+.content ul li::before {
+  content: "—";
+  position: absolute;
+  left: 0;
+  color: var(--muted);
+}
+.content ol {
+  counter-reset: item;
+}
+.content ol li::before {
+  counter-increment: item;
+  content: counter(item) ".";
+  position: absolute;
+  left: 0;
+  color: var(--muted);
+  min-width: 1.5em;
+}
+.content blockquote {
+  margin: 1.5rem 0;
+  padding: 1rem 1.5rem;
+  background: var(--blockquote-bg);
+  border-left: 3px solid var(--accent);
+  color: var(--blockquote-text);
+  border-radius: 2px;
+}
+.content code {
+  font-family: inherit;
+  background: var(--code-bg);
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+  font-size: 0.9em;
+  color: var(--code-text);
+}
+.content pre {
+  background: var(--pre-bg);
+  border: 1px solid var(--pre-border);
+  border-radius: 4px;
+  padding: 1.2rem;
+  overflow-x: auto;
+  margin: 1.5rem 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--pre-text);
+  position: relative;
+}
+.content pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+}
+.content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+}
+.content th,
+.content td {
+  padding: 0.7rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+.content th {
+  background: var(--table-header-bg);
+  color: var(--heading);
+  font-weight: 600;
+}
+.content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 2px;
+}
+.content hr {
+  border: 0;
+  height: 1px;
+  background: var(--border);
+  margin: 2rem 0;
+}
+.content dl {
+  margin: 1.5rem 0;
+}
+.content dt {
+  font-weight: 600;
+  color: var(--heading);
+  margin-top: 1rem;
+}
+.content dd {
+  margin-left: 1.5rem;
+  color: var(--text);
+}
+
+/* ---------- Copy button ---------- */
+.code-block {
+  position: relative;
+  margin: 1.5rem 0;
+}
+.code-block pre {
+  margin: 0;
+}
+.copy-btn {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  color: var(--button-muted);
+  font-family: inherit;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--transition),
+    color var(--transition);
+  padding: 0.2rem 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+.code-block:hover .copy-btn,
+.copy-btn.visible {
+  opacity: 1;
+}
+.copy-btn:hover,
+.copy-btn.copied {
+  color: var(--accent);
+}
+.copy-btn .copy-check {
+  opacity: 0;
+  font-size: 0.9rem;
+  transition: opacity var(--transition);
+  margin-left: 0.2rem;
+}
+.copy-btn.copied .copy-check {
+  opacity: 1;
+}
+
+/* ---------- Back to top ---------- */
+.back-to-top {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  padding: 0.3rem 0.7rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--transition),
+    visibility var(--transition);
+  border-radius: 3px;
+  z-index: 50;
+}
+.back-to-top.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* ---------- Help modal ---------- */
+.help-modal {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 1rem;
+}
+.help-modal[hidden] {
+  display: none;
+}
+.help-content {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 2rem;
+  max-width: 30rem;
+  width: 90%;
+  border-radius: 4px;
+  color: var(--text);
+}
+.help-content h2 {
+  margin-bottom: 1rem;
+  color: var(--heading);
+}
+.help-content ul {
+  list-style: none;
+  margin-bottom: 1.5rem;
+}
+.help-content li {
+  margin-bottom: 0.5rem;
+}
+.help-content kbd {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.1em 0.4em;
+  font-family: inherit;
+  font-size: 0.85em;
+}
+.help-close {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  padding: 0.4rem 1rem;
+  font-family: inherit;
+  cursor: pointer;
+  display: block;
+  margin-left: auto;
+  transition: background var(--transition);
+}
+.help-close:hover {
+  background: var(--code-bg);
+}
+
+.no-js-warning {
+  color: var(--term-warning);
+  text-align: center;
+  margin-top: 2rem;
+  font-style: italic;
+}
+
+.page-footer {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-align: left;
+}
+
+/* ---------- Focus visible ---------- */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .blinking-cursor {
+    animation: none;
+    opacity: 1;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---------- Print ---------- */
+@media print {
+  body {
+    background: white;
+    color: black;
+    padding: 0;
+  }
+  .progress-bar,
+  .ascii-decor,
+  .page-tools,
+  .back-to-top,
+  .help-modal,
+  .copy-btn,
+  .sidebar-toggle,
+  .sidebar,
+  .skip-link,
+  .top-nav {
+    display: none !important;
+  }
+  .manpage {
+    max-width: 100%;
+  }
+  .title,
+  .synopsis,
+  .meta,
+  .content {
+    color: black;
+  }
+  .content pre {
+    border: 1px solid #ccc;
+    background: #fafafa;
+  }
+  a::after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+    color: #555;
+  }
+  .repo-link::after {
+    content: "";
+  }
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 600px) {
+  body {
+    padding: 1rem;
+  }
+  .title {
+    font-size: 1.8rem;
+  }
+  .meta strong {
+    min-width: 8rem;
+  }
+  .term-search {
+    flex-wrap: wrap;
+  }
+  .man-toc {
+    max-height: 40vh;
+  }
+  .back-to-top {
+    bottom: 1rem;
+    right: 1rem;
+  }
+}
+```
+## ./docs/dist/script.js
+
+```javascript
+(function () {
+  "use strict";
+
+  /* =========================================================
+     CONSTANTS & GLOBAL REFERENCES
+     (cached on load, always checked for null)
+  ========================================================= */
+  var doc = document;
+  var body = doc.body;
+  var html = doc.documentElement;
+
+  // Cache semua elemen kunci (null-safe)
+  var sidebar = doc.getElementById("sidebar");
+  var sidebarToggle = doc.getElementById("sidebar-toggle");
+  var tocList = doc.getElementById("toc-list");
+  var tocToggle = doc.getElementById("toc-toggle");
+  var manToc = doc.getElementById("man-toc");
+  var contentArea = doc.getElementById("content");
+  var searchInput = doc.getElementById("search-input");
+  var searchClear = doc.getElementById("search-clear");
+  var searchResults = doc.getElementById("search-results");
+  var progressBar = doc.getElementById("progress-bar");
+  var backToTopBtn = doc.getElementById("back-to-top");
+  var helpModal = doc.getElementById("help-modal");
+  var helpClose = doc.getElementById("help-close");
+  var dateEl = doc.getElementById("date_modified");
+  var yearSpan = doc.getElementById("current-year");
+
+  /* =========================================================
+     SANITASI & UTILITAS KEAMANAN
+  ========================================================= */
+  /**
+   * Escape HTML entities strictly to prevent XSS.
+   * Used on any user-controlled text before inserting into DOM.
+   */
+  function escapeHtml(text) {
+    if (typeof text !== "string") return "";
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  /**
+   * Safely set text content (no HTML interpretation).
+   */
+  function safeText(el, text) {
+    if (el) el.textContent = text;
+  }
+
+  /**
+   * Debounce with maximum wait protection (optional).
+   */
+  function debounce(fn, delay) {
+    var timer;
+    return function () {
+      var context = this,
+        args = arguments;
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        fn.apply(context, args);
+      }, delay);
+    };
+  }
+
+  /* =========================================================
+     PREFERENCES & LOCAL STORAGE SAFETY
+  ========================================================= */
+  function getPref(key, fallback) {
+    try {
+      var val = localStorage.getItem(key);
+      return val !== null ? val : fallback;
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  function setPref(key, value) {
+    try {
+      localStorage.setItem(key, value);
+    } catch (e) {
+      /* quota exceeded or disabled */
+    }
+  }
+
+  function getPrefBool(key, fallback) {
+    return getPref(key, fallback ? "1" : "0") === "1";
+  }
+
+  function setPrefBool(key, value) {
+    setPref(key, value ? "1" : "0");
+  }
+
+  /* =========================================================
+     THEME (improved persistence & no flash)
+  ========================================================= */
+  function applyTheme(theme) {
+    html.classList.toggle("light", theme === "light");
+    html.setAttribute("data-theme", theme);
+    setPref("manpage-theme", theme);
+  }
+
+  function initTheme() {
+    var saved = getPref("manpage-theme", "dark");
+    applyTheme(saved);
+    // Remove no-transition after first paint to allow smooth switches later
+    window.requestAnimationFrame(function () {
+      window.requestAnimationFrame(function () {
+        body.classList.remove("no-transition");
+      });
+    });
+  }
+
+  function toggleTheme() {
+    var next = html.classList.contains("light") ? "dark" : "light";
+    applyTheme(next);
+  }
+
+  // Initial call
+  body.classList.add("no-transition");
+  initTheme();
+
+  /* =========================================================
+     DATE / CURRENT YEAR
+  ========================================================= */
+  if (dateEl) {
+    var months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
+    var now = new Date();
+    dateEl.textContent =
+      ("0" + now.getDate()).slice(-2) +
+      " " +
+      months[now.getMonth()] +
+      " " +
+      now.getFullYear();
+  }
+  if (yearSpan) yearSpan.textContent = new Date().getFullYear();
+
+  /* =========================================================
+     SIDEBAR (with persistence & better a11y)
+  ========================================================= */
+  var sidebarOpen = getPrefBool("sidebar-open", false);
+  function setSidebarState(open) {
+    if (sidebar) sidebar.classList.toggle("open", open);
+    if (sidebarToggle)
+      sidebarToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    setPrefBool("sidebar-open", open);
+    sidebarOpen = open;
+  }
+
+  if (sidebar && sidebarToggle) {
+    // initial state
+    setSidebarState(sidebarOpen);
+
+    sidebarToggle.addEventListener("click", function (e) {
+      e.stopPropagation();
+      setSidebarState(!sidebarOpen);
+    });
+
+    // Close on outside click (safe)
+    doc.addEventListener("click", function (e) {
+      if (
+        sidebarOpen &&
+        !sidebar.contains(e.target) &&
+        e.target !== sidebarToggle &&
+        !sidebarToggle.contains(e.target)
+      ) {
+        setSidebarState(false);
+      }
+    });
+
+    // Close with Escape when sidebar has focus (or global)
+    doc.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && sidebarOpen && !helpModal.hidden) return; // help modal handles own Esc
+      if (e.key === "Escape" && sidebarOpen) {
+        setSidebarState(false);
+        sidebarToggle.focus();
+      }
+    });
+  }
+
+  /* =========================================================
+     TABLE OF CONTENTS (dynamic, nested, safe, a11y enhanced)
+  ========================================================= */
+  function buildSafeTOC() {
+    if (!tocList || !contentArea) return;
+
+    var headings = contentArea.querySelectorAll("h2, h3, h4");
+    if (headings.length === 0) {
+      if (tocToggle) tocToggle.style.display = "none";
+      return;
+    }
+
+    // Generate IDs and collect
+    var items = [];
+    for (var i = 0; i < headings.length; i++) {
+      var h = headings[i];
+      if (!h.id) {
+        h.id = "section-" + i + "-" + Math.random().toString(36).substr(2, 8);
+      }
+      var level = parseInt(h.tagName.charAt(1)) || 2; // h2 -> 2, h3 -> 3, etc.
+      items.push({ level: level, text: h.textContent.trim(), id: h.id });
+    }
+
+    // Build nested list (max depth 3: h2,h3,h4)
+    var html = buildNestedList(items, 2);
+    tocList.innerHTML = html; // all HTML is generated from escaped text, safe
+
+    // Add anchor links to headings (clickable anchor icon)
+    addHeadingAnchors(headings);
+
+    // Click events for smooth scroll & active
+    var links = tocList.querySelectorAll("a");
+    links.forEach(function (link) {
+      link.addEventListener("click", function (e) {
+        e.preventDefault();
+        var id = link.getAttribute("href").substring(1);
+        var target = doc.getElementById(id);
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth" });
+          // Update active class (visual)
+          links.forEach(function (l) {
+            l.classList.remove("active");
+          });
+          link.classList.add("active");
+          // Update URL hash without jump
+          if (history.pushState) {
+            history.pushState(null, "", "#" + id);
+          }
+          // Close TOC on mobile?
+          if (window.innerWidth < 768 && manToc) {
+            manToc.classList.remove("visible");
+            tocToggle.setAttribute("aria-expanded", "false");
+          }
+        }
+      });
+    });
+
+    // Toggle TOC visibility (persist state)
+    var tocVisible = getPrefBool("toc-visible", false);
+    if (manToc && tocToggle) {
+      function updateTOCVisibility(visible) {
+        manToc.classList.toggle("visible", visible);
+        tocToggle.setAttribute("aria-expanded", visible ? "true" : "false");
+        setPrefBool("toc-visible", visible);
+      }
+      updateTOCVisibility(tocVisible);
+
+      tocToggle.addEventListener("click", function () {
+        var current = manToc.classList.contains("visible");
+        updateTOCVisibility(!current);
+      });
+    }
+
+    // Scroll spy: highlight active TOC item
+    var tocAnchors = [];
+    links.forEach(function (link) {
+      var id = link.getAttribute("href").substring(1);
+      var el = doc.getElementById(id);
+      if (el) tocAnchors.push({ link: link, el: el });
+    });
+
+    function updateActiveTOC() {
+      var scrollPos = window.scrollY + 100;
+      var activeLink = null;
+      // Walk backwards to find the last heading above scroll position
+      for (var i = tocAnchors.length - 1; i >= 0; i--) {
+        if (tocAnchors[i].el.offsetTop <= scrollPos) {
+          activeLink = tocAnchors[i].link;
+          break;
+        }
+      }
+      links.forEach(function (l) {
+        l.classList.remove("active");
+      });
+      if (activeLink) activeLink.classList.add("active");
+    }
+
+    window.addEventListener("scroll", debounce(updateActiveTOC, 100), {
+      passive: true,
+    });
+    updateActiveTOC();
+  }
+
+  /**
+   * Recursively build nested <ul> from items array.
+   * Safe: all text passed through escapeHtml.
+   */
+  function buildNestedList(items, currentLevel) {
+    var html = "";
+    var i = 0;
+    while (i < items.length) {
+      var item = items[i];
+      if (item.level < currentLevel) break; // back to parent
+      if (item.level > currentLevel) {
+        // Start sublist
+        var subItems = [];
+        while (i < items.length && items[i].level > currentLevel) {
+          subItems.push(items[i]);
+          i++;
+        }
+        html += "<ul>" + buildNestedList(subItems, currentLevel + 1) + "</ul>";
+        continue;
+      }
+      // Same level
+      html +=
+        '<li><a href="#' + item.id + '">' + escapeHtml(item.text) + "</a></li>";
+      i++;
+      // If next item is deeper, it will be handled in the while loop above on next iteration
+    }
+    return html;
+  }
+
+  /**
+   * Add anchor links (🔗) to headings, copy URL on click.
+   */
+  function addHeadingAnchors(headings) {
+    headings.forEach(function (h) {
+      // Avoid duplicate anchor
+      if (h.querySelector(".heading-anchor")) return;
+
+      var anchor = doc.createElement("a");
+      anchor.href = "#" + h.id;
+      anchor.className = "heading-anchor";
+      anchor.setAttribute("aria-label", "Copy link to this heading");
+      anchor.innerHTML = '<span aria-hidden="true">🔗</span>'; // safe static HTML
+      anchor.addEventListener("click", function (e) {
+        e.preventDefault();
+        // Copy URL with hash
+        var url = window.location.href.split("#")[0] + "#" + h.id;
+        copyToClipboardSafe(url, function (success) {
+          if (success) {
+            anchor.classList.add("copied");
+            setTimeout(function () {
+              anchor.classList.remove("copied");
+            }, 2000);
+          }
+        });
+      });
+      h.appendChild(anchor);
+    });
+  }
+
+  /* =========================================================
+     CLIENT-SIDE SEARCH (safe, no ReDoS, accessible)
+  ========================================================= */
+  var currentHighlightIndex = -1;
+  var allHighlights = [];
+
+  function clearHighlights() {
+    if (!contentArea) return;
+    var highlights = contentArea.querySelectorAll(".search-highlight");
+    highlights.forEach(function (span) {
+      var parent = span.parentNode;
+      parent.replaceChild(doc.createTextNode(span.textContent), span);
+      parent.normalize();
+    });
+    allHighlights = [];
+    currentHighlightIndex = -1;
+  }
+
+  /**
+   * Escape regex special characters safely.
+   */
+  function escapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function performSearch() {
+    if (!searchInput || !contentArea) return;
+    clearHighlights();
+    var query = searchInput.value.trim();
+    if (!query) {
+      safeText(searchResults, "");
+      return;
+    }
+
+    // Limit query length to prevent performance issues
+    if (query.length > 100) {
+      safeText(searchResults, "Query too long");
+      return;
+    }
+
+    try {
+      var escapedQuery = escapeRegExp(query);
+      var regex = new RegExp("(" + escapedQuery + ")", "gi");
+    } catch (e) {
+      safeText(searchResults, "Invalid search pattern");
+      return;
+    }
+
+    highlightTextNodes(contentArea, regex);
+    allHighlights = Array.from(
+      contentArea.querySelectorAll(".search-highlight"),
+    );
+
+    if (allHighlights.length > 0) {
+      safeText(
+        searchResults,
+        allHighlights.length +
+          " match" +
+          (allHighlights.length > 1 ? "es" : ""),
+      );
+      currentHighlightIndex = 0;
+      setCurrentHighlight(0);
+    } else {
+      safeText(searchResults, "No matches");
+    }
+  }
+
+  function highlightTextNodes(node, regex) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      var text = node.textContent;
+      if (!text) return;
+      var match;
+      var lastIndex = 0;
+      var fragment = doc.createDocumentFragment();
+      regex.lastIndex = 0;
+      while ((match = regex.exec(text)) !== null) {
+        if (match.index > lastIndex) {
+          fragment.appendChild(
+            doc.createTextNode(text.substring(lastIndex, match.index)),
+          );
+        }
+        var span = doc.createElement("span");
+        span.className = "search-highlight";
+        span.textContent = match[0]; // safe, uses textContent
+        fragment.appendChild(span);
+        lastIndex = regex.lastIndex;
+        if (match[0].length === 0) {
+          regex.lastIndex++; // avoid infinite loop on zero-length match
+        }
+      }
+      if (lastIndex < text.length) {
+        fragment.appendChild(doc.createTextNode(text.substring(lastIndex)));
+      }
+      if (fragment.childNodes.length > 0 && node.parentNode) {
+        node.parentNode.replaceChild(fragment, node);
+      }
+    } else if (
+      node.nodeType === Node.ELEMENT_NODE &&
+      !/^(script|style|textarea|select|button|code|noscript)$/i.test(
+        node.tagName,
+      )
+    ) {
+      // Skip highlight inside these tags and our own highlights
+      if (node.classList.contains("search-highlight")) return;
+      // Use static NodeList to avoid live modification issues
+      var children = Array.from(node.childNodes);
+      children.forEach(function (child) {
+        highlightTextNodes(child, regex);
+      });
+    }
+  }
+
+  function setCurrentHighlight(index) {
+    allHighlights.forEach(function (span, i) {
+      span.classList.toggle("current", i === index);
+    });
+    if (allHighlights.length > 0 && allHighlights[index]) {
+      allHighlights[index].scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }
+  }
+
+  function navigateHighlights(direction) {
+    if (allHighlights.length === 0) return;
+    currentHighlightIndex += direction;
+    if (currentHighlightIndex >= allHighlights.length)
+      currentHighlightIndex = 0;
+    if (currentHighlightIndex < 0)
+      currentHighlightIndex = allHighlights.length - 1;
+    setCurrentHighlight(currentHighlightIndex);
+  }
+
+  if (searchInput) {
+    searchInput.addEventListener("input", debounce(performSearch, 300));
+    searchInput.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        navigateHighlights(e.shiftKey ? -1 : 1);
+      } else if (e.key === "Escape") {
+        clearHighlights();
+        searchInput.value = "";
+        safeText(searchResults, "");
+      }
+    });
+    if (searchClear) {
+      searchClear.addEventListener("click", function () {
+        searchInput.value = "";
+        clearHighlights();
+        safeText(searchResults, "");
+        searchInput.focus();
+      });
+    }
+  }
+
+  /* =========================================================
+     COPY HELPER (safe clipboard & fallback)
+  ========================================================= */
+  function copyToClipboardSafe(text, callback) {
+    if (!navigator.clipboard || !navigator.clipboard.writeText) {
+      fallbackCopyText(text, callback);
+      return;
+    }
+    navigator.clipboard
+      .writeText(text)
+      .then(function () {
+        if (callback) callback(true);
+      })
+      .catch(function () {
+        fallbackCopyText(text, callback);
+      });
+  }
+
+  function fallbackCopyText(text, callback) {
+    var textarea = doc.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    body.appendChild(textarea);
+    textarea.select();
+    textarea.setSelectionRange(0, 999999); // mobile
+    var success = false;
+    try {
+      success = doc.execCommand("copy");
+    } catch (e) {}
+    body.removeChild(textarea);
+    if (callback) callback(!!success);
+  }
+
+  /* =========================================================
+     ENHANCE COPY BUTTONS for code blocks
+  ========================================================= */
+  function enhanceCopyButtons() {
+    if (!contentArea) return;
+    var pres = contentArea.querySelectorAll("pre");
+    for (var i = 0; i < pres.length; i++) {
+      var pre = pres[i];
+      if (pre.closest(".code-block")) continue;
+
+      var wrapper = doc.createElement("div");
+      wrapper.className = "code-block";
+      pre.parentNode.insertBefore(wrapper, pre);
+      wrapper.appendChild(pre);
+
+      var btn = doc.createElement("button");
+      btn.className = "copy-btn";
+      btn.type = "button";
+      btn.setAttribute("aria-label", "Copy code to clipboard");
+
+      var label = doc.createElement("span");
+      label.className = "copy-label";
+      label.textContent = "Copy";
+      btn.appendChild(label);
+
+      var check = doc.createElement("span");
+      check.className = "copy-check";
+      check.setAttribute("aria-hidden", "true");
+      check.textContent = "✓";
+      btn.appendChild(check);
+
+      btn.addEventListener(
+        "click",
+        (function (preEl, btnEl, labelEl) {
+          return function () {
+            var codeEl = preEl.querySelector("code");
+            var code = codeEl ? codeEl.textContent : preEl.textContent;
+            copyToClipboardSafe(code, function (success) {
+              if (success) {
+                btnEl.classList.add("copied");
+                btnEl.setAttribute("aria-label", "Copied to clipboard");
+                labelEl.textContent = "Copied";
+                setTimeout(function () {
+                  btnEl.classList.remove("copied");
+                  btnEl.setAttribute("aria-label", "Copy code to clipboard");
+                  labelEl.textContent = "Copy";
+                }, 2000);
+              } else {
+                labelEl.textContent = "Select & copy";
+                setTimeout(function () {
+                  labelEl.textContent = "Copy";
+                }, 3000);
+              }
+            });
+          };
+        })(pre, btn, label),
+      );
+
+      wrapper.appendChild(btn);
+
+      // Show button permanently on touch devices
+      if ("ontouchstart" in window) {
+        btn.classList.add("visible");
+      }
+    }
+  }
+
+  /* =========================================================
+     PROGRESS BAR & BACK-TO-TOP
+  ========================================================= */
+  var scrollTicking = false;
+  function updateScrollUI() {
+    var scrollTop = window.scrollY;
+    if (progressBar) {
+      var docHeight = Math.max(
+        doc.documentElement.scrollHeight - window.innerHeight,
+        1,
+      );
+      var scrolled = Math.min((scrollTop / docHeight) * 100, 100);
+      progressBar.style.width = scrolled + "%";
+      progressBar.setAttribute("aria-valuenow", Math.floor(scrolled));
+    }
+    if (backToTopBtn) {
+      backToTopBtn.classList.toggle("visible", scrollTop > 300);
+    }
+    scrollTicking = false;
+  }
+
+  function onScroll() {
+    if (!scrollTicking) {
+      scrollTicking = true;
+      requestAnimationFrame(updateScrollUI);
+    }
+  }
+
+  if (progressBar || backToTopBtn) {
+    window.addEventListener("scroll", onScroll, { passive: true });
+    updateScrollUI();
+  }
+
+  if (backToTopBtn) {
+    backToTopBtn.addEventListener("click", function () {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      backToTopBtn.blur();
+    });
+  }
+
+  /* =========================================================
+     READING TIME ESTIMATOR
+  ========================================================= */
+  function showReadingTime() {
+    if (!contentArea) return;
+    var text = contentArea.textContent || "";
+    var wordCount = text.trim().split(/\s+/).length;
+    var minutes = Math.max(1, Math.ceil(wordCount / 200)); // avg 200 wpm
+    var metaDiv = doc.querySelector(".meta");
+    if (metaDiv) {
+      var p = doc.createElement("p");
+      p.innerHTML = "<strong>Reading time</strong> ~" + minutes + " min";
+      metaDiv.appendChild(p);
+    }
+  }
+
+  /* =========================================================
+     TYPEWRITER EFFECT (with reduced motion respect)
+  ========================================================= */
+  var synopsis = doc.querySelector(".synopsis[data-typewriter]");
+  var prefersReducedMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)",
+  ).matches;
+  var typewriterActive = false;
+  var typeIndex = 0;
+  var typeInterval = null;
+
+  function startTypewriter(text) {
+    if (!synopsis) return;
+    typeIndex = 0;
+    synopsis.textContent = "";
+    typewriterActive = true;
+    typeInterval = setInterval(function () {
+      typeIndex++;
+      synopsis.textContent = text.substring(0, typeIndex);
+      if (typeIndex >= text.length) {
+        clearInterval(typeInterval);
+        typewriterActive = false;
+      }
+    }, 30);
+  }
+
+  function stopTypewriter() {
+    clearInterval(typeInterval);
+    typewriterActive = false;
+  }
+
+  if (synopsis) {
+    var originalText = synopsis.getAttribute("data-typewriter") || "";
+    if (prefersReducedMotion) {
+      synopsis.textContent = originalText;
+    } else {
+      startTypewriter(originalText);
+    }
+
+    window.toggleTypewriterEffect = function () {
+      if (typewriterActive) {
+        stopTypewriter();
+      } else if (typeIndex >= originalText.length) {
+        startTypewriter(originalText);
+      } else {
+        // Resume
+        startTypewriter(originalText);
+      }
+    };
+  }
+
+  /* =========================================================
+     HELP MODAL (focus trap, a11y)
+  ========================================================= */
+  var lastFocusedBeforeModal = null;
+
+  function getFocusableIn(el) {
+    var selector =
+      'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
+    return Array.from(el.querySelectorAll(selector));
+  }
+
+  function trapTabKey(e) {
+    if (e.key !== "Tab" || !helpModal) return;
+    var focusable = getFocusableIn(helpModal);
+    if (focusable.length === 0) {
+      e.preventDefault();
+      return;
+    }
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+    if (e.shiftKey && doc.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && doc.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
+  function showHelp() {
+    if (!helpModal || !helpModal.hidden) return;
+    lastFocusedBeforeModal = doc.activeElement;
+    helpModal.hidden = false;
+    helpModal.addEventListener("keydown", trapTabKey);
+    var focusable = getFocusableIn(helpModal);
+    if (focusable.length > 0) {
+      focusable[0].focus();
+    } else {
+      helpModal.setAttribute("tabindex", "-1");
+      helpModal.focus();
+    }
+  }
+
+  function hideHelp() {
+    if (!helpModal || helpModal.hidden) return;
+    helpModal.hidden = true;
+    helpModal.removeEventListener("keydown", trapTabKey);
+    if (
+      lastFocusedBeforeModal &&
+      typeof lastFocusedBeforeModal.focus === "function"
+    ) {
+      lastFocusedBeforeModal.focus();
+    }
+    lastFocusedBeforeModal = null;
+  }
+
+  if (helpModal) {
+    helpModal.addEventListener("click", function (e) {
+      if (e.target === helpModal) hideHelp();
+    });
+  }
+  if (helpClose) {
+    helpClose.addEventListener("click", hideHelp);
+  }
+
+  /* =========================================================
+     READING POSITION MEMORY (session)
+  ========================================================= */
+  (function () {
+    var scrollKey = "scroll-pos-" + window.location.pathname;
+    var savedScroll = sessionStorage.getItem(scrollKey);
+    if (savedScroll) {
+      // Restore after TOC built
+      window.addEventListener("load", function () {
+        var top = parseInt(savedScroll, 10);
+        if (!isNaN(top) && top > 0) {
+          window.scrollTo({ top: top });
+        }
+      });
+    }
+    window.addEventListener("beforeunload", function () {
+      sessionStorage.setItem(scrollKey, window.scrollY);
+    });
+  })();
+
+  /* =========================================================
+     KEYBOARD SHORTCUTS (extended, safe)
+  ========================================================= */
+  doc.addEventListener("keydown", function (e) {
+    var target = e.target;
+    var tag = target.tagName;
+    var isEditable =
+      tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable;
+
+    // Always allow Escape and ? even in inputs
+    if (isEditable && e.key !== "Escape" && e.key !== "?" && e.key !== "m") {
+      return;
+    }
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+    switch (e.key) {
+      case "j":
+      case "ArrowDown":
+        e.preventDefault();
+        window.scrollBy({ top: 100, behavior: "smooth" });
+        break;
+      case "k":
+      case "ArrowUp":
+        e.preventDefault();
+        window.scrollBy({ top: -100, behavior: "smooth" });
+        break;
+      case "g":
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        break;
+      case "G":
+        window.scrollTo({
+          top: doc.documentElement.scrollHeight,
+          behavior: "smooth",
+        });
+        break;
+      case "p":
+        window.print();
+        break;
+      case "l":
+        toggleTheme();
+        break;
+      case "c":
+        if (typeof window.toggleTypewriterEffect === "function") {
+          window.toggleTypewriterEffect();
+        }
+        break;
+      case "s":
+        if (searchInput) {
+          e.preventDefault();
+          searchInput.focus();
+          searchInput.select();
+        }
+        break;
+      case "?":
+        e.preventDefault();
+        showHelp();
+        break;
+      case "Escape":
+        if (helpModal && !helpModal.hidden) {
+          hideHelp();
+        } else {
+          // Clear search
+          if (searchInput) {
+            searchInput.value = "";
+            clearHighlights();
+            safeText(searchResults, "");
+          }
+          if (sidebarOpen) setSidebarState(false);
+        }
+        break;
+      case "m":
+        // Toggle sidebar
+        if (sidebar) {
+          setSidebarState(!sidebarOpen);
+        }
+        break;
+      case "y":
+        // Yank URL to clipboard
+        e.preventDefault();
+        copyToClipboardSafe(window.location.href, function (success) {
+          // Optional brief feedback
+          if (success) console.log("URL copied: " + window.location.href);
+        });
+        break;
+      case "[":
+        // Previous heading
+        e.preventDefault();
+        navigateHeadings(-1);
+        break;
+      case "]":
+        // Next heading
+        e.preventDefault();
+        navigateHeadings(1);
+        break;
+      default:
+        break;
+    }
+  });
+
+  function navigateHeadings(direction) {
+    if (!contentArea) return;
+    var headings = Array.from(contentArea.querySelectorAll("h2, h3, h4"));
+    if (headings.length === 0) return;
+    var scrollY = window.scrollY + (direction > 0 ? 10 : -10);
+    var currentIndex = -1;
+    // Find the heading closest to current position
+    for (var i = 0; i < headings.length; i++) {
+      if (direction > 0 && headings[i].offsetTop > scrollY) {
+        currentIndex = i;
+        break;
+      } else if (direction < 0 && headings[i].offsetTop >= scrollY) {
+        currentIndex = i - 1;
+        break;
+      }
+    }
+    if (direction > 0 && currentIndex === -1)
+      currentIndex = headings.length - 1;
+    if (direction < 0 && currentIndex < 0) currentIndex = 0;
+    if (headings[currentIndex]) {
+      headings[currentIndex].scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }
+
+  /* =========================================================
+     INITIALISE EVERYTHING
+  ========================================================= */
+  buildSafeTOC();
+  enhanceCopyButtons();
+  showReadingTime();
+
+  // Prevent accidental zoom on double-tap (optional)
+  doc.addEventListener(
+    "dblclick",
+    function (e) {
+      if (e.target.closest && e.target.closest("button, a, input")) return;
+      e.preventDefault();
+    },
+    { passive: false },
+  );
+})();
+```
+## ./docs/dist/index.html
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Starting a simple blog" />
+    <title>My First Blog</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400;1,500&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Ganti path statis dengan placeholder base_path -->
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body data-terminal="full">
+    <div
+      class="progress-bar"
+      id="progress-bar"
+      role="progressbar"
+      aria-label="Reading progress"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      aria-valuenow="0"
+    ></div>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+
+    <nav class="top-nav"><ul><li><a href="./index.html">Home</a></li></ul></nav>
+
+    <button
+      class="sidebar-toggle"
+      id="sidebar-toggle"
+      aria-label="Toggle sidebar"
+    >
+      <span class="sidebar-toggle-icon" aria-hidden="true">☰</span>
+    </button>
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <main class="manpage" id="main-content">
+      <header class="page-header">
+        <div class="ascii-decor" aria-hidden="true">
+          ════════════════════════════════════════
+        </div>
+
+        <h1 class="title">
+          My First Blog<span class="blinking-cursor" aria-hidden="true">_</span>
+        </h1>
+
+        <p class="synopsis" data-typewriter="Starting a simple blog">Starting a simple blog</p>
+
+        <hr class="separator" />
+
+        <div class="meta">
+          <p><strong>Author</strong> Your Name</p>
+          <p>
+            <strong>Repository</strong>
+            <a
+              href="https://github.com/username/repo"
+              class="repo-link"
+              target="_blank"
+              rel="noopener noreferrer"
+              >https://github.com/username/repo</a
+            >
+          </p>
+          <p><strong>License</strong> MIT</p>
+          <p><strong>Date Modified</strong> <span id="date_modified"></span></p>
+        </div>
+
+        <div class="page-tools" id="page-tools">
+          <div class="term-search">
+            <span class="search-prompt" aria-hidden="true"
+              >$ man snapcat | grep</span
+            >
+            <input
+              type="text"
+              id="search-input"
+              placeholder="Search documentation..."
+              autocomplete="off"
+              aria-label="Search within page"
+            />
+            <span
+              class="search-results"
+              id="search-results"
+              aria-live="polite"
+            ></span>
+            <button
+              class="search-clear"
+              id="search-clear"
+              aria-label="Clear search"
+            >
+              ×
+            </button>
+          </div>
+
+          <button
+            class="toc-toggle"
+            id="toc-toggle"
+            aria-expanded="false"
+            aria-controls="man-toc"
+          >
+            📑 Table of Contents
+          </button>
+          <nav class="man-toc" id="man-toc" aria-label="Table of contents">
+            <ul id="toc-list"></ul>
+          </nav>
+        </div>
+      </header>
+
+      <article class="content" id="content"><h2>Hello Blog</h2>
+<p>Minimal blog content here.</p>
+</article>
+
+      <footer class="page-footer">
+        <p>Powered by rawssg &copy; <span id="current-year"></span></p>
+      </footer>
+
+      <button
+        class="back-to-top"
+        id="back-to-top"
+        type="button"
+        aria-label="Back to top of page"
+      >
+        <span aria-hidden="true">[^]</span>
+      </button>
+    </main>
+
+    <!-- Help Modal -->
+    <div
+      id="help-modal"
+      class="help-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="help-title"
+      hidden
+    >
+      <div class="help-content">
+        <h2 id="help-title">Shortcut Keys</h2>
+        <ul>
+          <li><kbd>j</kbd> / <kbd>↓</kbd> : scroll down</li>
+          <li><kbd>k</kbd> / <kbd>↑</kbd> : scroll up</li>
+          <li><kbd>g</kbd> : go to top</li>
+          <li><kbd>G</kbd> : go to bottom</li>
+          <li><kbd>p</kbd> : print page</li>
+          <li><kbd>c</kbd> : toggle typewriter</li>
+          <li><kbd>l</kbd> : toggle light theme</li>
+          <li><kbd>s</kbd> : focus search</li>
+          <li><kbd>?</kbd> : show/hide this help</li>
+          <li><kbd>Escape</kbd> : close help / clear search</li>
+        </ul>
+        <button
+          class="help-close"
+          id="help-close"
+          type="button"
+          aria-label="Close help"
+        >
+          [x]
+        </button>
+      </div>
+    </div>
+
+    <noscript>
+      <p class="no-js-warning">
+        JavaScript is disabled. Some interactive features are unavailable.
+      </p>
+    </noscript>
+
+    <!-- Ganti path statis dengan placeholder base_path -->
+    <script src="./script.js"></script>
+  </body>
+</html>
 ```
 ## ./Cargo.toml
 
@@ -3192,6 +5809,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.103"
+base64 = "0.21"
 built = { version = "0.8.1", features = ["chrono"] }
 clap = { version = "4.6.1", features = ["derive"] }
 notify = { version = "8.2.0", features = ["macos_kqueue"] }

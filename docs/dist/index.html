@@ -3,9 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="{{ desc }}" />
-    <title>{{ title }}</title>
-    {{ favicon }}
+    <meta name="description" content="Starting a simple blog" />
+    <title>My First Blog</title>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -13,7 +13,7 @@
       rel="stylesheet"
     />
     <!-- Ganti path statis dengan placeholder base_path -->
-    <link rel="stylesheet" href="{{ base_path }}styles.css" />
+    <link rel="stylesheet" href="./styles.css" />
   </head>
   <body data-terminal="full">
     <div
@@ -27,7 +27,7 @@
     ></div>
     <a class="skip-link" href="#main-content">Skip to content</a>
 
-    {{ navbar }}
+    <nav class="top-nav"><ul><li><a href="./index.html">Home</a></li></ul></nav>
 
     <button
       class="sidebar-toggle"
@@ -36,7 +36,7 @@
     >
       <span class="sidebar-toggle-icon" aria-hidden="true">☰</span>
     </button>
-    <aside class="sidebar" id="sidebar">{{ sidebar }}</aside>
+    <aside class="sidebar" id="sidebar"></aside>
 
     <main class="manpage" id="main-content">
       <header class="page-header">
@@ -45,26 +45,26 @@
         </div>
 
         <h1 class="title">
-          {{ title }}<span class="blinking-cursor" aria-hidden="true">_</span>
+          My First Blog<span class="blinking-cursor" aria-hidden="true">_</span>
         </h1>
 
-        <p class="synopsis" data-typewriter="{{ desc }}">{{ desc }}</p>
+        <p class="synopsis" data-typewriter="Starting a simple blog">Starting a simple blog</p>
 
         <hr class="separator" />
 
         <div class="meta">
-          <p><strong>Author</strong> {{ author }}</p>
+          <p><strong>Author</strong> Your Name</p>
           <p>
             <strong>Repository</strong>
             <a
-              href="{{ repo_url }}"
+              href="https://github.com/username/repo"
               class="repo-link"
               target="_blank"
               rel="noopener noreferrer"
-              >{{ repo_url }}</a
+              >https://github.com/username/repo</a
             >
           </p>
-          <p><strong>License</strong> {{ license }}</p>
+          <p><strong>License</strong> MIT</p>
           <p><strong>Date Modified</strong> <span id="date_modified"></span></p>
         </div>
 
@@ -108,10 +108,12 @@
         </div>
       </header>
 
-      <article class="content" id="content">{{ content }}</article>
+      <article class="content" id="content"><h2>Hello Blog</h2>
+<p>Minimal blog content here.</p>
+</article>
 
       <footer class="page-footer">
-        <p>{{ footer }} &copy; <span id="current-year"></span></p>
+        <p>Powered by rawssg &copy; <span id="current-year"></span></p>
       </footer>
 
       <button
@@ -165,6 +167,6 @@
     </noscript>
 
     <!-- Ganti path statis dengan placeholder base_path -->
-    <script src="{{ base_path }}script.js"></script>
+    <script src="./script.js"></script>
   </body>
 </html>
