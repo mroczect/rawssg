@@ -1,0 +1,31 @@
+navbar:
+  - label: Home
+    url: index.html
+  - label: Quick Start
+    url: quick-start.html
+  - label: Installation
+    url: installation.html
+  - label: Configuration
+    url: configuration.html
+  - label: API Reference
+    url: api-reference.html
+  - label: Q&A
+    url: qna.html
+  - label: License
+    url: license.html
+sidebar:
+  - label: Home
+    url: index.html
+  - label: Quick Start
+    url: quick-start.html
+  - label: Installation
+    url: installation.html
+  - label: Configuration
+    url: configuration.html
+  - label: API Reference
+    url: api-reference.html
+  - label: Q&A
+    url: qna.html
+  - label: License
+    url: license.html
+site_name: "RawSSG"

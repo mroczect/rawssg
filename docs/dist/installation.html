@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Complete guide to installing rawssg – pre-built binaries, installer script, or build from source" />
+    <title>Installation</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0NSIgZmlsbD0iaHNsKDE3NSwgNzAlLCA1MCUpIiAvPjx0ZXh0IHg9IjUwIiB5PSI1MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zNWVtIiBmb250LXNpemU9IjU1IiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0iI2ZmZiIgZm9udC1mYW1pbHk9InN5c3RlbS11aSwgc2Fucy1zZXJpZiI+UjwvdGV4dD48L3N2Zz4=">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400;1,500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body data-terminal="full" class="no-transition">
+    <div
+      class="progress-bar"
+      id="progress-bar"
+      role="progressbar"
+      aria-label="Reading progress"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      aria-valuenow="0"
+    ></div>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+
+    <!-- Navbar -->
+    
+    <nav class="top-nav">
+      <ul>
+        
+        <li><a href="index.html">Home</a></li>
+        
+        <li><a href="quick-start.html">Quick Start</a></li>
+        
+        <li><a href="installation.html">Installation</a></li>
+        
+        <li><a href="configuration.html">Configuration</a></li>
+        
+        <li><a href="api-reference.html">API Reference</a></li>
+        
+        <li><a href="qna.html">Q&amp;A</a></li>
+        
+        <li><a href="license.html">License</a></li>
+        
+      </ul>
+    </nav>
+    
+
+    <!-- Sidebar Toggle & Sidebar -->
+    <button
+      class="sidebar-toggle"
+      id="sidebar-toggle"
+      aria-label="Toggle sidebar"
+    >
+      <span class="sidebar-toggle-icon" aria-hidden="true">☰</span>
+    </button>
+    <aside class="sidebar" id="sidebar">
+      
+      <ul>
+        
+        <li><a href="index.html">Home</a></li>
+        
+        <li><a href="quick-start.html">Quick Start</a></li>
+        
+        <li><a href="installation.html">Installation</a></li>
+        
+        <li><a href="configuration.html">Configuration</a></li>
+        
+        <li><a href="api-reference.html">API Reference</a></li>
+        
+        <li><a href="qna.html">Q&amp;A</a></li>
+        
+        <li><a href="license.html">License</a></li>
+        
+      </ul>
+      
+    </aside>
+
+    <main class="manpage" id="main-content">
+      <header class="page-header">
+        <div class="ascii-decor" aria-hidden="true">
+          ════════════════════════════════════════
+        </div>
+
+        <h1 class="title">
+          Installation<span class="blinking-cursor" aria-hidden="true">_</span>
+        </h1>
+
+        <p class="synopsis" data-typewriter="Complete guide to installing rawssg – pre-built binaries, installer script, or build from source">Complete guide to installing rawssg – pre-built binaries, installer script, or build from source</p>
+
+        <hr class="separator" />
+
+        <div class="meta">
+          <p><strong>Author</strong> mroczect</p>
+          <p>
+            <strong>Repository</strong>
+            <a
+              href="https://github.com/mroczect/rawssg.git"
+              class="repo-link"
+              target="_blank"
+              rel="noopener noreferrer"
+              >https://github.com/mroczect/rawssg.git</a
+            >
+          </p>
+          <p><strong>License</strong> MIT</p>
+          <p><strong>Date Modified</strong> <span id="date_modified"></span></p>
+        </div>
+
+        <div class="page-tools" id="page-tools">
+          <div class="term-search">
+            <span class="search-prompt" aria-hidden="true"
+              >$ man snapcat | grep</span
+            >
+            <input
+              type="text"
+              id="search-input"
+              placeholder="Search documentation..."
+              autocomplete="off"
+              aria-label="Search within page"
+            />
+            <span
+              class="search-results"
+              id="search-results"
+              aria-live="polite"
+            ></span>
+            <button
+              class="search-clear"
+              id="search-clear"
+              aria-label="Clear search"
+            >
+              ×
+            </button>
+          </div>
+
+          <button
+            class="toc-toggle"
+            id="toc-toggle"
+            aria-expanded="false"
+            aria-controls="man-toc"
+          >
+            📑 Table of Contents
+          </button>
+          <nav class="man-toc" id="man-toc" aria-label="Table of contents">
+            <ul id="toc-list"></ul>
+          </nav>
+        </div>
+      </header>
+
+      <article class="content" id="content"><h1>Installation</h1>
+<p>RawSSG is not published on <strong>crates.io</strong>, but you can obtain it via <strong>GitHub Releases</strong> (pre‑built binaries) or by <strong>building from source</strong> with Cargo. This guide covers every supported method.</p>
+<hr />
+<h2>Prerequisites</h2>
+<ul>
+<li><strong>Linux</strong> or <strong>macOS</strong> (Windows may work but has not been fully tested).</li>
+<li>If building from source: <strong>Rust toolchain</strong> 2024 edition (<a href="https://rustup.rs">rustup</a>).</li>
+<li>Optional: <strong>Git</strong> (for cloning the repository and including build metadata).</li>
+</ul>
+<hr />
+<h2>1. Quick Install via Installer Script</h2>
+<p>The easiest way to install RawSSG is with the provided shell script. It automatically detects your operating system, downloads the correct archive, and copies the binary to a directory in your <code>PATH</code>.</p>
+<h3>One‑liner</h3>
+<pre><code class="language-bash">curl -fsSL https://raw.githubusercontent.com/mroczect/rawssg/master/installer.sh | bash
+</code></pre>
+<p>The script will install <code>rawssg</code> into <code>/usr/local/bin</code> by default. You can customise the installation directory with the <code>--dir</code> option (see below).</p>
+<h3>Review the script before running (recommended)</h3>
+<pre><code class="language-bash">curl -fsSL https://raw.githubusercontent.com/mroczect/rawssg/master/installer.sh -o installer.sh
+less installer.sh
+bash installer.sh
+</code></pre>
+<h3>Script options</h3>
+<table><thead><tr><th>Option</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>--tag TAG</code></td><td>Install a specific release tag (e.g., <code>v0.1.0</code>, <code>cli-v0.1.0</code>). Defaults to the latest release.</td></tr>
+<tr><td><code>--dir PATH</code></td><td>Install the binary into <code>PATH</code> (default: <code>/usr/local/bin</code>). Can also be set via environment variable <code>INSTALL_DIR</code>.</td></tr>
+<tr><td><code>--debug</code></td><td>Enable verbose output showing every step, including HTTP status codes and extracted files.</td></tr>
+<tr><td><code>--help</code></td><td>Print usage information.</td></tr>
+</tbody></table>
+<p><strong>Examples:</strong></p>
+<pre><code class="language-bash"># Install latest release to a custom directory
+bash installer.sh --dir ~/.local/bin
+
+# Install a specific version with debug output
+bash installer.sh --tag v0.1.0 --debug
+</code></pre>
+<p>After the installation completes, verify it with:</p>
+<pre><code class="language-bash">rawssg info
+</code></pre>
+<hr />
+<h2>2. Manual Download of Pre‑built Binaries</h2>
+<p>If you prefer not to use the installer script, you can download the binary directly from <a href="https://github.com/mroczect/rawssg/releases">GitHub Releases</a>. Two platform archives are provided:</p>
+<table><thead><tr><th>Platform</th><th>Archive name</th></tr></thead><tbody>
+<tr><td>Linux (x86_64)</td><td><code>rawssg-ubuntu-latest.tar.gz</code></td></tr>
+<tr><td>macOS (Apple Silicon, also runs on Intel via Rosetta 2)</td><td><code>rawssg-macos-latest.tar.gz</code></td></tr>
+</tbody></table>
+<p>Each archive contains a single statically‑linked executable named <code>rawssg</code>.</p>
+<h3>Step‑by‑step (Linux example)</h3>
+<pre><code class="language-bash"># Download a specific version (replace v0.1.0 with the desired tag)
+curl -LO https://github.com/mroczect/rawssg/releases/download/v0.1.0/rawssg-ubuntu-latest.tar.gz
+
+# Extract the binary
+tar -xzf rawssg-ubuntu-latest.tar.gz
+
+# Install to /usr/local/bin (requires sudo)
+sudo install -m 755 rawssg /usr/local/bin/
+
+# Verify the installation
+rawssg info
+</code></pre>
+<p>For macOS, use the <code>rawssg-macos-latest.tar.gz</code> archive and follow the same steps.</p>
+<h3>Verify the integrity of the download</h3>
+<p>Every release includes a <code>SHA256SUMS</code> file. You can verify the archive’s checksum with:</p>
+<pre><code class="language-bash"># Download checksums for the specific release
+curl -LO https://github.com/mroczect/rawssg/releases/download/v0.1.0/SHA256SUMS
+
+# Compare with the actual file
+sha256sum -c SHA256SUMS 2&gt;&amp;1 | grep rawssg
+</code></pre>
+<p>A successful verification prints <code>rawssg-&lt;platform&gt;.tar.gz: OK</code>.</p>
+<hr />
+<h2>3. Build from Source (with Cargo)</h2>
+<p>Building from source is the best option if you want to modify the code, contribute, or run on a platform for which no pre‑built binary exists.</p>
+<pre><code class="language-bash"># Clone the repository
+git clone https://github.com/mroczect/rawssg.git
+cd rawssg
+
+# Build an optimised release binary
+cargo build --release
+
+# The binary is located at target/release/rawssg
+./target/release/rawssg info
+</code></pre>
+<h3>Using the included Makefile</h3>
+<p>A <code>Makefile</code> is provided for convenience. Run <code>make help</code> to see all targets.</p>
+<table><thead><tr><th>Target</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>make</code> / <code>make release</code></td><td>Build a release binary.</td></tr>
+<tr><td><code>make debug</code></td><td>Build a debug binary (faster compile, no optimisations).</td></tr>
+<tr><td><code>make check</code></td><td>Check the code for errors without producing a binary.</td></tr>
+<tr><td><code>make test</code></td><td>Run the test suite.</td></tr>
+<tr><td><code>make fmt</code></td><td>Format source code.</td></tr>
+<tr><td><code>make lint</code></td><td>Run Clippy lints with strict warnings.</td></tr>
+<tr><td><code>make install</code></td><td>Build release binary and copy it to <code>/usr/local/bin</code> (sudo).</td></tr>
+<tr><td><code>make clean</code></td><td>Remove build artifacts.</td></tr>
+<tr><td><code>make distclean</code></td><td>Remove build artifacts and any generated site content.</td></tr>
+</tbody></table>
+<pre><code class="language-bash"># Build and install in one step
+sudo make install
+</code></pre>
+<hr />
+<h2>4. Verify the Installation</h2>
+<p>No matter which method you used, confirm that <code>rawssg</code> is correctly installed and executable:</p>
+<pre><code class="language-bash">rawssg help
+rawssg info
+</code></pre>
+<p>The <code>info</code> subcommand prints the version, build date, compiler version, target triple, Git commit, and whether the working tree was clean. If you see a similar output without errors, the installation is successful.</p>
+<p>Example output:</p>
+<pre><code>rawssg v0.1.0
+Build date       : 2026-07-11 15:04:05
+Profile          : release
+Target           : x86_64-unknown-linux-gnu
+Rust compiler    : rustc 1.85.0 (4d91de4e4 2026-01-01)
+Git commit       : a1b2c3d
+Git branch       : master
+Working tree     : clean
+</code></pre>
+<hr />
+<h2>Troubleshooting</h2>
+<h3><code>rawssg: command not found</code></h3>
+<ul>
+<li>Ensure the installation directory (e.g., <code>/usr/local/bin</code>) is listed in your <code>PATH</code>.
+<pre><code class="language-bash">echo $PATH
+</code></pre>
+If not, add the following line to your shell configuration (<code>~/.bashrc</code>, <code>~/.zshrc</code>):
+<pre><code class="language-bash">export PATH="$PATH:/usr/local/bin"
+</code></pre>
+Then reload the configuration: <code>source ~/.bashrc</code> (or restart your terminal).</li>
+</ul>
+<h3><code>Permission denied</code> during installation</h3>
+<ul>
+<li>If you see <code>Permission denied</code> when copying the binary, run the command with <code>sudo</code> or choose a writable directory like <code>~/.local/bin</code>.<br />
+Example with the installer script:
+<pre><code class="language-bash">bash installer.sh --dir ~/.local/bin
+</code></pre>
+Make sure <code>~/.local/bin</code> is in your <code>PATH</code>.</li>
+</ul>
+<h3>Download errors or “HTTP 404”</h3>
+<ul>
+<li>Check that the release tag exists on the <a href="https://github.com/mroczect/rawssg/releases">Releases</a> page. If you used <code>--tag</code>, verify the spelling.</li>
+<li>The pre‑built archives are only generated for tags matching <code>v*</code> or <code>cli-v*</code>. Other tags will not have binaries attached.</li>
+</ul>
+<h3>Build failures from source</h3>
+<ul>
+<li>Make sure your Rust toolchain is up to date:
+<pre><code class="language-bash">rustup update
+</code></pre>
+</li>
+<li>RawSSG is a pure Rust project; no system dependencies are required. If you encounter a linker error, ensure you have a C compiler installed (<code>gcc</code> or <code>clang</code>).</li>
+<li>Run <code>cargo check</code> to see detailed error messages.</li>
+</ul>
+<hr />
+<h2>Development / Nightly Versions</h2>
+<p>To try the latest (unreleased) features from the <code>master</code> branch:</p>
+<pre><code class="language-bash">git clone https://github.com/mroczect/rawssg.git
+cd rawssg
+cargo build --release
+</code></pre>
+<p>Or run directly without installing:</p>
+<pre><code class="language-bash">cargo run --release -- serve
+</code></pre>
+<p>Remember that the <code>master</code> branch may be unstable. Use at your own risk, and please report any bugs you encounter.</p>
+<hr />
+<p>Now you are ready to start using RawSSG. Head over to the <a href="quick-start.html">Quick Start</a> guide to create your first project.</p>
+</article>
+
+      <div id="copyright" align="center">
+          &copy;  2026 https://mroczect.github.io/rawssg - All Rights Reserved.
+          <span>Last Updated : 07/11/2026 18:31:25</span>
+      </div>
+
+      <button
+        class="back-to-top"
+        id="back-to-top"
+        type="button"
+        aria-label="Back to top of page"
+      >
+        <span aria-hidden="true">[^]</span>
+      </button>
+    </main>
+
+    <!-- Help Modal -->
+    <div
+      id="help-modal"
+      class="help-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="help-title"
+      hidden
+    >
+      <div class="help-content">
+        <h2 id="help-title">Shortcut Keys</h2>
+        <ul>
+          <li><kbd>j</kbd> / <kbd>↓</kbd> : scroll down</li>
+          <li><kbd>k</kbd> / <kbd>↑</kbd> : scroll up</li>
+          <li><kbd>g</kbd> : go to top</li>
+          <li><kbd>G</kbd> : go to bottom</li>
+          <li><kbd>p</kbd> : print page</li>
+          <li><kbd>c</kbd> : toggle typewriter</li>
+          <li><kbd>l</kbd> : toggle light theme</li>
+          <li><kbd>s</kbd> : focus search</li>
+          <li><kbd>?</kbd> : show/hide this help</li>
+          <li><kbd>Escape</kbd> : close help / clear search</li>
+        </ul>
+        <button
+          class="help-close"
+          id="help-close"
+          type="button"
+          aria-label="Close help"
+        >
+          [x]
+        </button>
+      </div>
+    </div>
+
+    <noscript>
+      <p class="no-js-warning">
+        JavaScript is disabled. Some interactive features are unavailable.
+      </p>
+    </noscript>
+
+    <script src="./script.js"></script>
+  </body>
+</html>

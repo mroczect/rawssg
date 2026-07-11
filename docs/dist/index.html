@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Simple Static Site Generator  Terminal-themed blogs &amp; docs" />
+    <title>RawSSG</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0NSIgZmlsbD0iaHNsKDE3NSwgNzAlLCA1MCUpIiAvPjx0ZXh0IHg9IjUwIiB5PSI1MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zNWVtIiBmb250LXNpemU9IjU1IiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0iI2ZmZiIgZm9udC1mYW1pbHk9InN5c3RlbS11aSwgc2Fucy1zZXJpZiI+UjwvdGV4dD48L3N2Zz4=">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400;1,500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body data-terminal="full" class="no-transition">
+    <div
+      class="progress-bar"
+      id="progress-bar"
+      role="progressbar"
+      aria-label="Reading progress"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      aria-valuenow="0"
+    ></div>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+
+    <!-- Navbar -->
+    
+    <nav class="top-nav">
+      <ul>
+        
+        <li><a href="index.html">Home</a></li>
+        
+        <li><a href="quick-start.html">Quick Start</a></li>
+        
+        <li><a href="installation.html">Installation</a></li>
+        
+        <li><a href="configuration.html">Configuration</a></li>
+        
+        <li><a href="api-reference.html">API Reference</a></li>
+        
+        <li><a href="qna.html">Q&amp;A</a></li>
+        
+        <li><a href="license.html">License</a></li>
+        
+      </ul>
+    </nav>
+    
+
+    <!-- Sidebar Toggle & Sidebar -->
+    <button
+      class="sidebar-toggle"
+      id="sidebar-toggle"
+      aria-label="Toggle sidebar"
+    >
+      <span class="sidebar-toggle-icon" aria-hidden="true">☰</span>
+    </button>
+    <aside class="sidebar" id="sidebar">
+      
+      <ul>
+        
+        <li><a href="index.html">Home</a></li>
+        
+        <li><a href="quick-start.html">Quick Start</a></li>
+        
+        <li><a href="installation.html">Installation</a></li>
+        
+        <li><a href="configuration.html">Configuration</a></li>
+        
+        <li><a href="api-reference.html">API Reference</a></li>
+        
+        <li><a href="qna.html">Q&amp;A</a></li>
+        
+        <li><a href="license.html">License</a></li>
+        
+      </ul>
+      
+    </aside>
+
+    <main class="manpage" id="main-content">
+      <header class="page-header">
+        <div class="ascii-decor" aria-hidden="true">
+          ════════════════════════════════════════
+        </div>
+
+        <h1 class="title">
+          RawSSG<span class="blinking-cursor" aria-hidden="true">_</span>
+        </h1>
+
+        <p class="synopsis" data-typewriter="Simple Static Site Generator  Terminal-themed blogs &amp; docs">Simple Static Site Generator  Terminal-themed blogs &amp; docs</p>
+
+        <hr class="separator" />
+
+        <div class="meta">
+          <p><strong>Author</strong> mroczect</p>
+          <p>
+            <strong>Repository</strong>
+            <a
+              href="https://github.com/mroczect/rawssg.git"
+              class="repo-link"
+              target="_blank"
+              rel="noopener noreferrer"
+              >https://github.com/mroczect/rawssg.git</a
+            >
+          </p>
+          <p><strong>License</strong> MIT</p>
+          <p><strong>Date Modified</strong> <span id="date_modified"></span></p>
+        </div>
+
+        <div class="page-tools" id="page-tools">
+          <div class="term-search">
+            <span class="search-prompt" aria-hidden="true"
+              >$ man snapcat | grep</span
+            >
+            <input
+              type="text"
+              id="search-input"
+              placeholder="Search documentation..."
+              autocomplete="off"
+              aria-label="Search within page"
+            />
+            <span
+              class="search-results"
+              id="search-results"
+              aria-live="polite"
+            ></span>
+            <button
+              class="search-clear"
+              id="search-clear"
+              aria-label="Clear search"
+            >
+              ×
+            </button>
+          </div>
+
+          <button
+            class="toc-toggle"
+            id="toc-toggle"
+            aria-expanded="false"
+            aria-controls="man-toc"
+          >
+            📑 Table of Contents
+          </button>
+          <nav class="man-toc" id="man-toc" aria-label="Table of contents">
+            <ul id="toc-list"></ul>
+          </nav>
+        </div>
+      </header>
+
+      <article class="content" id="content"><h1>RawSSG</h1>
+<h2><strong>Terminal-themed static site generator for blogs and project documentation.</strong>
+Written in Rust. Fast, lightweight, and ready to use without external dependencies.</h2>
+<h2>Why RawSSG?</h2>
+<ul>
+<li>Terminal aesthetics a man page-style theme with dark/light mode, progress bar, and keyboard shortcuts.</li>
+<li>Markdown + YAML write content with frontmatter, let RawSSG convert it to HTML.</li>
+<li>Ready-to-use blog posts sorted by date, automatic RSS feed of the 10 most recent posts.</li>
+<li>Live reload built-in development server, auto-reloads when files change.</li>
+<li>No runtime dependencies the final output is pure HTML/CSS/JS, can be hosted anywhere.</li>
+<li>Interactive CLI create pages, configure navigation, validate content, and compile from the terminal.</li>
+<li>Automatic favicon generated from the site name, no additional image files required.</li>
+<li>Full configuration site name, description, language, base URL, author, license, all in <code>config.yaml</code>.</li>
+</ul>
+<hr />
+<h2>Quick Start</h2>
+<h3>Prerequisites</h3>
+<ul>
+<li>Rust toolchain (install via <a href="https://rustup.rs">rustup</a>) 2024 edition.</li>
+<li>Cargo (comes with Rust).</li>
+<li>Git (optional, for version information in binaries).</li>
+</ul>
+<h3>Install &amp; Build</h3>
+<pre><code class="language-bash">git clone https://github.com/mroczect/rawssg.git
+cd rawssg
+cargo build --release
+</code></pre>
+<h3>Create a New Project</h3>
+<pre><code class="language-bash">./target/release/rawssg create # index page + config.yaml
+./target/release/rawssg create blog # new blog post
+</code></pre>
+<h3>Build &amp; View Results</h3>
+<pre><code class="language-bash">./target/release/rawssg compile # results in dist/
+./target/release/rawssg serve # dev server on port 3000
+</code></pre>
+<p>Go to <code>http://localhost:3000</code> and view your site live. As files change, the browser will reload automatically.</p>
+<hr />
+<h2>Project Structure</h2>
+<pre><code>your-project/
+ config.yaml # site settings
+ content/
+  index.md # home page
+  blog/
+  hello.md # blog posts
+ static/ # (optional) custom assets
+ dist/ # build results (no need to edit)
+</code></pre>
+<hr />
+<h2>Configuration</h2>
+<p>All settings are in <code>config.yaml</code>. The <em>default</em> values work right out of the box, but you can customize them:</p>
+<pre><code class="language-yaml">site_name: "RawSSG"
+description: "Terminal-themed static site generator"
+language: "en"
+base_url: "http://localhost:3000"
+author: "mroczect"
+repo_url: "https://github.com/mroczect/rawssg"
+license: "MIT"
+navbar:
+- label: "Home"
+url: "index.html"
+- label: "Blog"
+url: "blog.html"
+</code></pre>
+<p>To change via CLI:</p>
+<pre><code class="language-bash">rawssg config set site_name "New Name"
+rawssg config add-nav "GitHub" "https://github.com/..."
+rawssg config check # validate all .md files
+</code></pre>
+<hr />
+<h2>Page Frontmatter</h2>
+<p>Every The <code>.md</code> file must have a YAML block at the beginning:</p>
+<pre><code class="language-yaml">---
+title: "Page Title"
+desc: "Short Description"
+author: "Your Name"
+date: 2026-07-11
+draft: false
+---
+</code></pre>
+<blockquote>
+<p>Pages with <code>draft: true</code> will be ignored during the build process.</p>
+</blockquote>
+<hr />
+<h2>Complete CLI</h2>
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>info</code></td><td>Version and build information.</td></tr>
+<tr><td><code>create</code></td><td>Create a new page (index or blog).</td></tr>
+<tr><td><code>config show</code></td><td>Show the current configuration.</td></tr>
+<tr><td><code>config set</code></td><td>Change configuration values.</td></tr>
+<tr><td><code>config add-nav</code></td><td>Add a navigation item.</td></tr>
+<tr><td><code>config check</code></td><td>Check content validity.</td></tr>
+<tr><td><code>compile</code></td><td>Build a static site.</td></tr>
+<tr><td><code>serve</code></td><td>Start a development server with live reload.</td></tr>
+</tbody></table>
+<hr />
+<h2>Customization</h2>
+<p>The <em>default</em> assets (CSS, JS, HTML templates) are embedded in the binary. To change them:</p>
+<ul>
+<li>Place <code>styles.css</code> or <code>script.js</code> in the <code>static/</code> directory (prioritized).</li>
+<li>HTML templates (such as <code>index.html</code>) currently need to be changed in the source code (<code>embedded.rs</code>). External template support is planned.</li>
+</ul>
+<hr />
+<h2>Build Variables</h2>
+<p>Use <code>rawssg info</code> unTo view:</p>
+<ul>
+<li>Build date</li>
+<li>Profile (<code>debug</code>/<code>release</code>)</li>
+<li>Target triple</li>
+<li>Rust version &amp; Git commit hash</li>
+<li>Working directory status (clean/dirty)</li>
+</ul>
+<hr />
+<h2>Contribution</h2>
+<p>Please open an issue or submit a pull request on <a href="https://github.com/mroczect/rawssg">GitHub</a>. Make sure:</p>
+<ul>
+<li>The code passes <code>cargo check</code> and <code>cargo clippy</code>.</li>
+<li>It doesn't break existing features.</li>
+<li>The documentation is updated if necessary.</li>
+</ul>
+<hr />
+<h2>License</h2>
+<p>This project is licensed under the <a href="LICENSE">MIT License</a>.</p>
+</article>
+
+      <div id="copyright" align="center">
+          &copy;  2026 https://mroczect.github.io/rawssg - All Rights Reserved.
+          <span>Last Updated : 07/11/2026 18:31:25</span>
+      </div>
+
+      <button
+        class="back-to-top"
+        id="back-to-top"
+        type="button"
+        aria-label="Back to top of page"
+      >
+        <span aria-hidden="true">[^]</span>
+      </button>
+    </main>
+
+    <!-- Help Modal -->
+    <div
+      id="help-modal"
+      class="help-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="help-title"
+      hidden
+    >
+      <div class="help-content">
+        <h2 id="help-title">Shortcut Keys</h2>
+        <ul>
+          <li><kbd>j</kbd> / <kbd>↓</kbd> : scroll down</li>
+          <li><kbd>k</kbd> / <kbd>↑</kbd> : scroll up</li>
+          <li><kbd>g</kbd> : go to top</li>
+          <li><kbd>G</kbd> : go to bottom</li>
+          <li><kbd>p</kbd> : print page</li>
+          <li><kbd>c</kbd> : toggle typewriter</li>
+          <li><kbd>l</kbd> : toggle light theme</li>
+          <li><kbd>s</kbd> : focus search</li>
+          <li><kbd>?</kbd> : show/hide this help</li>
+          <li><kbd>Escape</kbd> : close help / clear search</li>
+        </ul>
+        <button
+          class="help-close"
+          id="help-close"
+          type="button"
+          aria-label="Close help"
+        >
+          [x]
+        </button>
+      </div>
+    </div>
+
+    <noscript>
+      <p class="no-js-warning">
+        JavaScript is disabled. Some interactive features are unavailable.
+      </p>
+    </noscript>
+
+    <script src="./script.js"></script>
+  </body>
+</html>

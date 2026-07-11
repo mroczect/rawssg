@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Complete reference for rawssg CLI commands, template variables, and build information" />
+    <title>API Reference</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0NSIgZmlsbD0iaHNsKDE3NSwgNzAlLCA1MCUpIiAvPjx0ZXh0IHg9IjUwIiB5PSI1MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zNWVtIiBmb250LXNpemU9IjU1IiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0iI2ZmZiIgZm9udC1mYW1pbHk9InN5c3RlbS11aSwgc2Fucy1zZXJpZiI+UjwvdGV4dD48L3N2Zz4=">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400;1,500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body data-terminal="full" class="no-transition">
+    <div
+      class="progress-bar"
+      id="progress-bar"
+      role="progressbar"
+      aria-label="Reading progress"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      aria-valuenow="0"
+    ></div>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+
+    <!-- Navbar -->
+    
+    <nav class="top-nav">
+      <ul>
+        
+        <li><a href="index.html">Home</a></li>
+        
+        <li><a href="quick-start.html">Quick Start</a></li>
+        
+        <li><a href="installation.html">Installation</a></li>
+        
+        <li><a href="configuration.html">Configuration</a></li>
+        
+        <li><a href="api-reference.html">API Reference</a></li>
+        
+        <li><a href="qna.html">Q&amp;A</a></li>
+        
+        <li><a href="license.html">License</a></li>
+        
+      </ul>
+    </nav>
+    
+
+    <!-- Sidebar Toggle & Sidebar -->
+    <button
+      class="sidebar-toggle"
+      id="sidebar-toggle"
+      aria-label="Toggle sidebar"
+    >
+      <span class="sidebar-toggle-icon" aria-hidden="true">☰</span>
+    </button>
+    <aside class="sidebar" id="sidebar">
+      
+      <ul>
+        
+        <li><a href="index.html">Home</a></li>
+        
+        <li><a href="quick-start.html">Quick Start</a></li>
+        
+        <li><a href="installation.html">Installation</a></li>
+        
+        <li><a href="configuration.html">Configuration</a></li>
+        
+        <li><a href="api-reference.html">API Reference</a></li>
+        
+        <li><a href="qna.html">Q&amp;A</a></li>
+        
+        <li><a href="license.html">License</a></li>
+        
+      </ul>
+      
+    </aside>
+
+    <main class="manpage" id="main-content">
+      <header class="page-header">
+        <div class="ascii-decor" aria-hidden="true">
+          ════════════════════════════════════════
+        </div>
+
+        <h1 class="title">
+          API Reference<span class="blinking-cursor" aria-hidden="true">_</span>
+        </h1>
+
+        <p class="synopsis" data-typewriter="Complete reference for rawssg CLI commands, template variables, and build information">Complete reference for rawssg CLI commands, template variables, and build information</p>
+
+        <hr class="separator" />
+
+        <div class="meta">
+          <p><strong>Author</strong> mroczect</p>
+          <p>
+            <strong>Repository</strong>
+            <a
+              href="https://github.com/mroczect/rawssg.git"
+              class="repo-link"
+              target="_blank"
+              rel="noopener noreferrer"
+              >https://github.com/mroczect/rawssg.git</a
+            >
+          </p>
+          <p><strong>License</strong> MIT</p>
+          <p><strong>Date Modified</strong> <span id="date_modified"></span></p>
+        </div>
+
+        <div class="page-tools" id="page-tools">
+          <div class="term-search">
+            <span class="search-prompt" aria-hidden="true"
+              >$ man snapcat | grep</span
+            >
+            <input
+              type="text"
+              id="search-input"
+              placeholder="Search documentation..."
+              autocomplete="off"
+              aria-label="Search within page"
+            />
+            <span
+              class="search-results"
+              id="search-results"
+              aria-live="polite"
+            ></span>
+            <button
+              class="search-clear"
+              id="search-clear"
+              aria-label="Clear search"
+            >
+              ×
+            </button>
+          </div>
+
+          <button
+            class="toc-toggle"
+            id="toc-toggle"
+            aria-expanded="false"
+            aria-controls="man-toc"
+          >
+            📑 Table of Contents
+          </button>
+          <nav class="man-toc" id="man-toc" aria-label="Table of contents">
+            <ul id="toc-list"></ul>
+          </nav>
+        </div>
+      </header>
+
+      <article class="content" id="content"><h1>API Reference</h1>
+<p>This document is the authoritative reference for RawSSG’s command‑line interface (CLI) and the data available when rendering templates. It covers every subcommand, their arguments, exit codes, and the template context you can use inside <code>index.html</code>, <code>rss.xml</code>, and <code>sitemap.xml</code>.</p>
+<hr />
+<h2>CLI Global Behaviour</h2>
+<p>The general syntax is:</p>
+<pre><code>rawssg [COMMAND] [OPTIONS]
+</code></pre>
+<ul>
+<li>RawSSG exits with <strong>0</strong> on success and <strong>non‑zero</strong> on any error (missing files, parse failures, etc.).</li>
+<li>The <code>--help</code> flag can be appended to any subcommand for inline help (e.g., <code>rawssg compile --help</code>).</li>
+<li>The <code>info</code> command is special: it prints build metadata and exits, ignoring any other arguments.</li>
+</ul>
+<hr />
+<h2>Commands</h2>
+<h3><code>info</code></h3>
+<p>Displays detailed build metadata. This information is embedded at compile time.</p>
+<pre><code class="language-bash">rawssg info
+</code></pre>
+<p><strong>Output example:</strong></p>
+<pre><code>rawssg v0.1.0
+Build date       : 2026-07-11 18:31:25
+Profile          : release
+Target           : x86_64-unknown-linux-gnu
+Rust compiler    : rustc 1.85.0 (4d91de4e4 2026-01-01)
+Git commit       : a1b2c3d
+Git branch       : master
+Working tree     : clean
+</code></pre>
+<table><thead><tr><th>Field</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>rawssg v...</code></td><td>Crate version from <code>Cargo.toml</code>.</td></tr>
+<tr><td><code>Build date</code></td><td>Local date and time when the binary was compiled.</td></tr>
+<tr><td><code>Profile</code></td><td><code>debug</code> or <code>release</code>.</td></tr>
+<tr><td><code>Target</code></td><td>Target triple (e.g., <code>x86_64-unknown-linux-gnu</code>).</td></tr>
+<tr><td><code>Rust compiler</code></td><td>Full <code>rustc --version</code> output used during compilation.</td></tr>
+<tr><td><code>Git commit</code></td><td>Short hash of the commit the binary was built from.</td></tr>
+<tr><td><code>Git branch</code></td><td>Branch name.</td></tr>
+<tr><td><code>Working tree</code></td><td><code>clean</code> if no uncommitted changes, otherwise <code>dirty (uncommitted changes)</code>.</td></tr>
+</tbody></table>
+<hr />
+<h3><code>create</code></h3>
+<p>Interactively scaffolds new pages. Prompts the user for metadata and writes the file(s) to the <code>content/</code> directory.</p>
+<pre><code class="language-bash">rawssg create [kind]
+</code></pre>
+<ul>
+<li>If no <code>kind</code> is given, creates an <strong>index page</strong> (<code>content/index.md</code>) and, if <code>config.yaml</code> does not exist, a default configuration file.</li>
+<li>If <code>kind</code> is <code>blog</code>, creates a <strong>blog post</strong> inside <code>content/blog/</code> with a URL‑friendly slug derived from the title.</li>
+</ul>
+<h4>Create an Index Page</h4>
+<pre><code class="language-bash">rawssg create
+</code></pre>
+<p>Prompts for:</p>
+<ul>
+<li><code>Title</code> (required)</li>
+<li><code>Description</code> (required)</li>
+<li><code>Author</code>, <code>Repository URL</code>, <code>License</code> (optional – leave empty to use global defaults later)</li>
+</ul>
+<p>After writing <code>content/index.md</code>, if no <code>config.yaml</code> exists, it creates one with the site name set to the chosen title and a single navbar entry pointing to <code>index.html</code>.</p>
+<h4>Create a Blog Post</h4>
+<pre><code class="language-bash">rawssg create blog
+</code></pre>
+<p>Prompts for:</p>
+<ul>
+<li><code>Title</code></li>
+<li><code>Description</code></li>
+<li><code>Author</code></li>
+<li><code>Repository URL</code></li>
+<li><code>License</code></li>
+<li><code>Footer text</code> (this extra field is not directly used by the generator but is stored in frontmatter)</li>
+</ul>
+<p>The resulting file is placed in <code>content/blog/&lt;slug&gt;.md</code>. The slug is generated from the title: lowercased, non‑alphanumeric characters replaced by hyphens, and consecutive hyphens collapsed.</p>
+<hr />
+<h3><code>config</code></h3>
+<p>Manages the site‑wide configuration (<code>config.yaml</code>). The subcommand requires an action.</p>
+<pre><code>rawssg config &lt;ACTION&gt; [OPTIONS]
+</code></pre>
+<h4><code>config show</code></h4>
+<p>Prints the entire <code>config.yaml</code> file to stdout.</p>
+<pre><code class="language-bash">rawssg config show
+</code></pre>
+<hr />
+<h4><code>config set</code></h4>
+<p>Updates a specific key in the configuration.</p>
+<pre><code class="language-bash">rawssg config set &lt;KEY&gt; &lt;VALUE&gt;
+</code></pre>
+<p><strong>Supported keys:</strong></p>
+<ul>
+<li><code>site_name</code> – Sets the site name.</li>
+<li><code>navbar.&lt;index&gt;.&lt;field&gt;</code> – Modify a navbar item’s <code>label</code> or <code>url</code>.<br />
+<code>&lt;index&gt;</code> is zero‑based. Example: <code>navbar.0.label</code>, <code>navbar.1.url</code>.</li>
+</ul>
+<p><strong>Examples:</strong></p>
+<pre><code class="language-bash">rawssg config set site_name "My New Site"
+rawssg config set navbar.0.url "/new-home.html"
+</code></pre>
+<p>Any other key will result in an error.</p>
+<hr />
+<h4><code>config add-nav</code></h4>
+<p>Adds a new item to the navbar list.</p>
+<pre><code class="language-bash">rawssg config add-nav &lt;LABEL&gt; &lt;URL&gt;
+</code></pre>
+<p><strong>Example:</strong></p>
+<pre><code class="language-bash">rawssg config add-nav "Docs" "/docs.html"
+</code></pre>
+<p>The new item is appended to the end of the navbar.</p>
+<hr />
+<h4><code>config remove-nav</code></h4>
+<p>Removes a navbar item by its zero‑based index.</p>
+<pre><code class="language-bash">rawssg config remove-nav &lt;INDEX&gt;
+</code></pre>
+<p><strong>Example:</strong></p>
+<pre><code class="language-bash">rawssg config remove-nav 0
+</code></pre>
+<p>If the index is out of bounds, an error is returned.</p>
+<hr />
+<h4><code>config check</code></h4>
+<p>Validates all Markdown files in the <code>content/</code> directory by attempting to parse their frontmatter and Markdown body.</p>
+<pre><code class="language-bash">rawssg config check
+</code></pre>
+<ul>
+<li>Prints <code>OK: path/to/file.md</code> for every valid file.</li>
+<li>Prints an error message for any file that fails parsing.</li>
+</ul>
+<p>This is useful for catching syntax errors before a full build.</p>
+<hr />
+<h3><code>compile</code></h3>
+<p>Builds the complete static site.</p>
+<pre><code class="language-bash">rawssg compile [CONTENT_DIR] [OUTPUT_DIR]
+</code></pre>
+<table><thead><tr><th>Argument</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>CONTENT_DIR</code></td><td><code>content</code></td><td>Path to the directory containing <code>.md</code> source files.</td></tr>
+<tr><td><code>OUTPUT_DIR</code></td><td><code>dist</code></td><td>Path to the output directory. Existing contents will be <strong>deleted</strong> before generation.</td></tr>
+</tbody></table>
+<p><strong>What it does:</strong></p>
+<ol>
+<li>Reads <code>config.yaml</code> (or uses defaults if absent).</li>
+<li>Walks <code>CONTENT_DIR</code> and parses every <code>.md</code> file. Draft pages are skipped.</li>
+<li>Generates an HTML page for each file using the embedded <code>index.html</code> Tera template.</li>
+<li>Creates <code>feed.xml</code> (RSS 2.0) with the 10 most recent blog posts.</li>
+<li>Creates <code>sitemap.xml</code> listing all generated pages.</li>
+<li>Copies any <code>static/</code> directory into the output root (if it exists).</li>
+<li>Writes <code>styles.css</code> and <code>script.js</code> from embedded defaults into the output root.</li>
+</ol>
+<p>The homepage (<code>content/index.md</code>) receives a special variable <code>blog_posts</code> containing the 5 most recent blog posts (sorted by date descending).</p>
+<hr />
+<h3><code>serve</code></h3>
+<p>Starts a local development server with live‑reload.</p>
+<pre><code class="language-bash">rawssg serve [PORT]
+</code></pre>
+<table><thead><tr><th>Argument</th><th>Default</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>PORT</code></td><td><code>3000</code></td><td>Port number to listen on.</td></tr>
+</tbody></table>
+<p><strong>Behaviour:</strong></p>
+<ul>
+<li>If the output directory (<code>dist</code>) does not exist, a full <code>compile</code> is executed first.</li>
+<li>Then an HTTP server starts on <code>0.0.0.0:PORT</code>.</li>
+<li>File watchers are set on <code>content/</code>, <code>templates/</code>, and <code>config.yaml</code>.</li>
+<li>On any change, the site is automatically rebuilt, and a counter is incremented.</li>
+<li>The included JavaScript polls <code>/__rawssg_reload</code> for that counter change and triggers a browser reload.</li>
+<li>Long‑polling timeout is 25 seconds.</li>
+</ul>
+<hr />
+<h2>Template Variables</h2>
+<p>When RawSSG renders pages, it provides a Tera context with the following variables. These can be used inside <code>index.html</code>, <code>rss.xml</code>, and <code>sitemap.xml</code>.</p>
+<h3>Base Template (<code>index.html</code>)</h3>
+<table><thead><tr><th>Variable</th><th>Type</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>title</code></td><td>string</td><td>Page title (from frontmatter).</td></tr>
+<tr><td><code>desc</code></td><td>string</td><td>Page description.</td></tr>
+<tr><td><code>author</code></td><td>string</td><td>Page author (falls back to global config).</td></tr>
+<tr><td><code>repo_url</code></td><td>string</td><td>Repository URL (page or global config).</td></tr>
+<tr><td><code>license</code></td><td>string</td><td>Licence name (page or global config).</td></tr>
+<tr><td><code>content</code></td><td>string</td><td>HTML‑rendered Markdown body.</td></tr>
+<tr><td><code>base_path</code></td><td>string</td><td>Relative path prefix to resolve assets (e.g., <code>"./"</code> for root pages, <code>"../"</code> for one level deep).</td></tr>
+<tr><td><code>favicon</code></td><td>string</td><td>Inline SVG data URI of the generated favicon.</td></tr>
+<tr><td><code>navbar</code></td><td>array of <code>NavItem</code></td><td>Navigation bar items from <code>config.yaml</code>.</td></tr>
+<tr><td><code>sidebar</code></td><td>array of <code>NavItem</code></td><td>Sidebar items from <code>config.yaml</code>.</td></tr>
+<tr><td><code>is_blog</code></td><td>boolean</td><td><code>true</code> if the page is under <code>blog/</code>.</td></tr>
+<tr><td><code>site_name</code></td><td>string</td><td>Site name from config.</td></tr>
+<tr><td><code>description</code></td><td>string</td><td>Site description from config.</td></tr>
+<tr><td><code>language</code></td><td>string</td><td>Language code from config.</td></tr>
+</tbody></table>
+<p><strong>Additional variable on the homepage (<code>index.html</code> only):</strong></p>
+<table><thead><tr><th>Variable</th><th>Type</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>blog_posts</code></td><td>array of <code>PageContext</code></td><td>The 5 most recent blog posts (sorted by date).</td></tr>
+</tbody></table>
+<p>Each <code>blog_posts</code> object is a <code>PageContext</code> with:</p>
+<ul>
+<li><code>frontmatter</code> (title, desc, date, etc.)</li>
+<li><code>content_html</code></li>
+<li><code>url</code></li>
+<li><code>file_path</code></li>
+<li><code>depth</code></li>
+<li><code>pub_date</code> (RFC 2822 formatted date)</li>
+</ul>
+<h3>RSS Template (<code>rss.xml</code>)</h3>
+<table><thead><tr><th>Variable</th><th>Type</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>config</code></td><td><code>GlobalConfig</code></td><td>The complete site configuration object.</td></tr>
+<tr><td><code>posts</code></td><td>array of <code>PageContext</code></td><td>Up to 10 most recent blog posts.</td></tr>
+<tr><td><code>base_url</code></td><td>string</td><td>The base URL from config (or default).</td></tr>
+</tbody></table>
+<h3>Sitemap Template (<code>sitemap.xml</code>)</h3>
+<table><thead><tr><th>Variable</th><th>Type</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>pages</code></td><td>array of <code>PageContext</code></td><td>All generated pages (except drafts).</td></tr>
+<tr><td><code>base_url</code></td><td>string</td><td>The base URL from config.</td></tr>
+</tbody></table>
+<hr />
+<h2>Embedded Assets</h2>
+<p>RawSSG ships with default CSS and JavaScript embedded in the binary. They are written to the output directory as:</p>
+<ul>
+<li><code>styles.css</code> – terminal‑themed stylesheet with light/dark mode, responsive layout, sidebar, and print styles.</li>
+<li><code>script.js</code> – interactive features: search, table of contents, theme toggle, keyboard shortcuts, code copy buttons, and live‑reload integration.</li>
+</ul>
+<p>You can override these by placing your own <code>styles.css</code> or <code>script.js</code> in the <code>static/</code> directory. The embedded versions are still written afterwards, so to fully replace them you would need to modify the compiler logic or rely on the static copy overwriting (currently static is copied first, then embedded files overwrite).</p>
+<hr />
+<h2>Exit Codes</h2>
+<table><thead><tr><th>Code</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>0</td><td>Success.</td></tr>
+<tr><td>1</td><td>General error (e.g., file not found, parse failure, CLI misuse).</td></tr>
+</tbody></table>
+<p>All errors are written to stderr before exit.</p>
+<hr />
+<h2>Environment Variables</h2>
+<p>RawSSG does not read any environment variables at runtime. All settings come from <code>config.yaml</code> and page frontmatter. The build script (<code>build.rs</code>) uses environment variables provided by Cargo (<code>PROFILE</code>, <code>TARGET</code>) and Git to inject compile‑time metadata.</p>
+<hr />
+<p>This reference should cover every public interface of RawSSG. For usage examples and tutorials, refer to the <a href="quick-start.html">Quick Start</a> and <a href="installation.html">Installation</a> guides.</p>
+</article>
+
+      <div id="copyright" align="center">
+          &copy;  2026 https://mroczect.github.io/rawssg - All Rights Reserved.
+          <span>Last Updated : 07/11/2026 18:31:25</span>
+      </div>
+
+      <button
+        class="back-to-top"
+        id="back-to-top"
+        type="button"
+        aria-label="Back to top of page"
+      >
+        <span aria-hidden="true">[^]</span>
+      </button>
+    </main>
+
+    <!-- Help Modal -->
+    <div
+      id="help-modal"
+      class="help-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="help-title"
+      hidden
+    >
+      <div class="help-content">
+        <h2 id="help-title">Shortcut Keys</h2>
+        <ul>
+          <li><kbd>j</kbd> / <kbd>↓</kbd> : scroll down</li>
+          <li><kbd>k</kbd> / <kbd>↑</kbd> : scroll up</li>
+          <li><kbd>g</kbd> : go to top</li>
+          <li><kbd>G</kbd> : go to bottom</li>
+          <li><kbd>p</kbd> : print page</li>
+          <li><kbd>c</kbd> : toggle typewriter</li>
+          <li><kbd>l</kbd> : toggle light theme</li>
+          <li><kbd>s</kbd> : focus search</li>
+          <li><kbd>?</kbd> : show/hide this help</li>
+          <li><kbd>Escape</kbd> : close help / clear search</li>
+        </ul>
+        <button
+          class="help-close"
+          id="help-close"
+          type="button"
+          aria-label="Close help"
+        >
+          [x]
+        </button>
+      </div>
+    </div>
+
+    <noscript>
+      <p class="no-js-warning">
+        JavaScript is disabled. Some interactive features are unavailable.
+      </p>
+    </noscript>
+
+    <script src="./script.js"></script>
+  </body>
+</html>
