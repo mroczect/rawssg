@@ -16,6 +16,9 @@ pub struct GlobalConfig {
     pub description: Option<String>,
     pub language: Option<String>,
     pub base_url: Option<String>,
+    pub author: Option<String>,
+    pub repo_url: Option<String>,
+    pub license: Option<String>,
 }
 
 fn default_site_name() -> String {
@@ -26,10 +29,12 @@ fn default_site_name() -> String {
 pub struct PageFrontMatter {
     pub title: String,
     pub desc: String,
-    pub author: String,
-    pub repo_url: String,
-    pub license: String,
-    pub footer: String,
+    #[serde(default)]
+    pub author: Option<String>,
+    #[serde(default)]
+    pub repo_url: Option<String>,
+    #[serde(default)]
+    pub license: Option<String>,
     #[serde(default)]
     pub date: Option<NaiveDate>,
     #[serde(default)]
@@ -45,4 +50,5 @@ pub struct PageContext {
     pub url: String,
     pub file_path: String,
     pub depth: usize,
+    pub pub_date: Option<String>, 
 }

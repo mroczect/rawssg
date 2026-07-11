@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="{{ desc }}" />
     <title>{{ title }}</title>
-    {{ favicon }}
+    <link rel="icon" type="image/svg+xml" href="{{ favicon }}" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -26,8 +26,18 @@
     ></div>
     <a class="skip-link" href="#main-content">Skip to content</a>
 
-    {{ navbar }}
+    <!-- Navbar -->
+    {% if navbar %}
+    <nav class="top-nav">
+      <ul>
+        {% for item in navbar %}
+        <li><a href="{{ item.url }}">{{ item.label }}</a></li>
+        {% endfor %}
+      </ul>
+    </nav>
+    {% endif %}
 
+    <!-- Sidebar Toggle & Sidebar -->
     <button
       class="sidebar-toggle"
       id="sidebar-toggle"
@@ -35,7 +45,15 @@
     >
       <span class="sidebar-toggle-icon" aria-hidden="true">☰</span>
     </button>
-    <aside class="sidebar" id="sidebar">{{ sidebar }}</aside>
+    <aside class="sidebar" id="sidebar">
+      {% if sidebar %}
+      <ul>
+        {% for item in sidebar %}
+        <li><a href="{{ item.url }}">{{ item.label }}</a></li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </aside>
 
     <main class="manpage" id="main-content">
       <header class="page-header">
@@ -107,11 +125,12 @@
         </div>
       </header>
 
-      <article class="content" id="content">{{ content }}</article>
+      <article class="content" id="content">{{ content | safe }}</article>
 
-      <footer class="page-footer">
-        <p>{{ footer }} &copy; <span id="current-year"></span></p>
-      </footer>
+      <div id="copyright" align="center">
+        &copy; 2026 https://mroczect.github.io/rawssg - All Rights Reserved.
+        <span>Last Updated : 07/11/2026 18:31:25</span>
+      </div>
 
       <button
         class="back-to-top"

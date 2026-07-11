@@ -8,6 +8,7 @@ use std::fs;
 use std::path::Path;
 use tera::{Context as TeraContext, Tera};
 use walkdir::WalkDir;
+use chrono::{TimeZone, Utc};
 
 pub fn compile_site(content_dir: &str, output_dir: &str) -> Result<()> {
     if Path::new(output_dir).exists() {
@@ -33,6 +34,7 @@ pub fn compile_site(content_dir: &str, output_dir: &str) -> Result<()> {
         .unwrap_or("http://localhost:3000");
 
     let mut tera = Tera::default();
+
     tera.add_raw_template("base.html", embedded::INDEX_TEMPLATE)?;
     tera.add_raw_template("rss.xml", embedded::RSS_TEMPLATE)?;
     tera.add_raw_template("sitemap.xml", embedded::SITEMAP_TEMPLATE)?;
@@ -58,12 +60,18 @@ pub fn compile_site(content_dir: &str, output_dir: &str) -> Result<()> {
         let url = out_name.to_string_lossy().to_string();
         let depth = rel_path.components().count().saturating_sub(1);
 
+        let pub_date = fm.date.map(|d| {
+            let dt = Utc.from_utc_datetime(&d.and_hms_opt(0, 0, 0).unwrap());
+            dt.format("%a, %d %b %Y %H:%M:%S %z").to_string()
+        });
+
         pages.push(PageContext {
             frontmatter: fm,
             content_html,
             url: url.clone(),
             file_path: path.to_string_lossy().to_string(),
             depth,
+            pub_date,
         });
     }
 
@@ -127,10 +135,21 @@ fn build_base_context(
     let mut ctx = TeraContext::new();
     ctx.insert("title", &page.frontmatter.title);
     ctx.insert("desc", &page.frontmatter.desc);
-    ctx.insert("author", &page.frontmatter.author);
-    ctx.insert("repo_url", &page.frontmatter.repo_url);
-    ctx.insert("license", &page.frontmatter.license);
-    ctx.insert("footer", &page.frontmatter.footer);
+
+    let author = page.frontmatter.author.as_deref()
+        .or(config.author.as_deref())
+        .unwrap_or("");
+    let repo_url = page.frontmatter.repo_url.as_deref()
+        .or(config.repo_url.as_deref())
+        .unwrap_or("");
+    let license = page.frontmatter.license.as_deref()
+        .or(config.license.as_deref())
+        .unwrap_or("");
+    
+    ctx.insert("author", author);
+    ctx.insert("repo_url", repo_url);
+    ctx.insert("license", license);
+
     ctx.insert("content", &page.content_html);
     ctx.insert("base_path", &relative_prefix(page.depth));
     ctx.insert("favicon", &favicon_uri);

@@ -682,3 +682,11 @@
   buildTOC();
   enhanceCopyButtons();
 })();
+
+(() => {
+  const copyrightElement = document.getElementById("copyright");
+  copyrightElement.innerHTML =
+    "&copy;  " +
+    new Date().getFullYear() +
+    " https://mroczect.github.io/rawssg - All Rights Reserved.";
+})();

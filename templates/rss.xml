@@ -11,7 +11,7 @@
       <title>{{ post.frontmatter.title }}</title>
       <link>{{ base_url }}/{{ post.url }}</link>
       <description>{{ post.frontmatter.desc }}</description>
-      <pubDate>{{ post.frontmatter.date | date(format="%a, %d %b %Y %H:%M:%S %z") }}</pubDate>
+      <pubDate>{{ post.pub_date }}</pubDate>
       <guid>{{ base_url }}/{{ post.url }}</guid>
     </item>
     {% endfor %}

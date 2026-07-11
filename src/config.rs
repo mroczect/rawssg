@@ -22,6 +22,9 @@ pub fn load_config_or_default(path: &str) -> Result<GlobalConfig> {
             description: None,
             language: None,
             base_url: None,
+            author: None,
+            repo_url: None,
+            license: None,
         });
     }
     load_config(path)

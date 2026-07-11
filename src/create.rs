@@ -12,21 +12,19 @@ fn prompt(question: &str) -> String {
 }
 
 pub fn create_index_page() -> Result<()> {
-    println!("Creating index page (homepage)...");
+	println!("Creating index page (homepage)...");
     let title = prompt("Title");
     let desc = prompt("Description");
-    let author = prompt("Author");
-    let repo_url = prompt("Repository URL");
-    let license = prompt("License");
-    let footer = prompt("Footer text");
-
-    let frontmatter = format!(
-        "---\ntitle: \"{}\"\ndesc: \"{}\"\nauthor: \"{}\"\nrepo_url: \"{}\"\nlicense: \"{}\"\nfooter: \"{}\"\n---\n\n# {}\n\n{}",
-        title, desc, author, repo_url, license, footer, title, desc
-    );
-
+    let author = prompt("Author (leave empty to use config default)");
+    let repo_url = prompt("Repository URL (leave empty to use config default)");
+    let license = prompt("License (leave empty to use config default)");
+    let mut fm = format!("---\ntitle: \"{}\"\ndesc: \"{}\"", title, desc);
+    if !author.is_empty() { fm.push_str(&format!("\nauthor: \"{}\"", author)); }
+    if !repo_url.is_empty() { fm.push_str(&format!("\nrepo_url: \"{}\"", repo_url)); }
+    if !license.is_empty() { fm.push_str(&format!("\nlicense: \"{}\"", license)); }
+    fm.push_str(&format!("\n---\n\n# {}\n\n{}", title, desc));
     fs::create_dir_all("content")?;
-    fs::write("content/index.md", frontmatter)?;
+    fs::write("content/index.md", fm)?;
 
     if !Path::new("config.yaml").exists() {
         let default_config = format!(
