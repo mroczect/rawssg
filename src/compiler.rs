@@ -1,40 +1,42 @@
 use crate::config;
 use crate::embedded;
-use crate::types::{GlobalConfig, PageFrontMatter, PageContext};
+use crate::types::{GlobalConfig, PageContext, PageFrontMatter};
 use anyhow::{Context, Result};
 use base64::Engine;
-use pulldown_cmark::{html, Options, Parser};
+use pulldown_cmark::{Options, Parser, html};
 use std::fs;
+use std::path::Path;
 use tera::{Context as TeraContext, Tera};
 use walkdir::WalkDir;
-use std::path::Path;
 
 pub fn compile_site(content_dir: &str, output_dir: &str) -> Result<()> {
     if Path::new(output_dir).exists() {
         fs::remove_dir_all(output_dir)?;
     }
     fs::create_dir_all(output_dir)?;
+
     if Path::new("static").exists() {
         copy_dir_all("static", output_dir)?;
     }
+
     let css_dest = Path::new(output_dir).join("styles.css");
     fs::write(&css_dest, embedded::STYLES_CSS)?;
     let js_dest = Path::new(output_dir).join("script.js");
     fs::write(&js_dest, embedded::SCRIPT_JS)?;
 
-    // 4. Muat konfigurasi global (dengan fallback)
     let global_config = config::load_config_or_default("config.yaml")?;
     let site_name = &global_config.site_name;
     let favicon_data_uri = generate_favicon_data_uri(site_name);
-    let base_url = global_config.base_url.as_deref().unwrap_or("http://localhost:3000");
+    let base_url = global_config
+        .base_url
+        .as_deref()
+        .unwrap_or("http://localhost:3000");
 
-    // 5. Inisialisasi Tera
     let mut tera = Tera::default();
     tera.add_raw_template("base.html", embedded::INDEX_TEMPLATE)?;
     tera.add_raw_template("rss.xml", embedded::RSS_TEMPLATE)?;
     tera.add_raw_template("sitemap.xml", embedded::SITEMAP_TEMPLATE)?;
 
-    // 6. Kumpulkan dan proses semua file markdown
     let mut pages: Vec<PageContext> = Vec::new();
     for entry in WalkDir::new(content_dir) {
         let entry = entry?;
@@ -44,10 +46,9 @@ pub fn compile_site(content_dir: &str, output_dir: &str) -> Result<()> {
         }
 
         let raw = fs::read_to_string(path)
-            .with_context(|| format!("Gagal membaca {}", path.display()))?;
+            .with_context(|| format!("Failed to read {}", path.display()))?;
         let (fm, content_html) = parse_markdown(&raw)?;
 
-        // Skip draft
         if fm.draft {
             continue;
         }
@@ -66,7 +67,6 @@ pub fn compile_site(content_dir: &str, output_dir: &str) -> Result<()> {
         });
     }
 
-    // 7. Sortir blog posts (yang ada di folder blog) berdasarkan tanggal, terbaru dulu
     let mut blog_posts: Vec<&PageContext> = pages
         .iter()
         .filter(|p| p.url.starts_with("blog/"))
@@ -78,28 +78,17 @@ pub fn compile_site(content_dir: &str, output_dir: &str) -> Result<()> {
             .then_with(|| a.frontmatter.title.cmp(&b.frontmatter.title))
     });
 
-    // 8. Pagination sederhana: halaman blog list /blog.html dengan 5 posting per halaman
     let per_page = 5;
     let total_posts = blog_posts.len();
-    let total_pages = (total_posts + per_page - 1) / per_page;
+    let _total_pages = (total_posts + per_page - 1) / per_page;
 
-    // 9. Render setiap halaman
     for page in &pages {
-        let mut context = build_base_context(&global_config, &page, &favicon_data_uri)?;
+        let mut context = build_base_context(&global_config, page, &favicon_data_uri)?;
 
-        // Jika ini adalah index.md, kita tambahkan daftar blog terbaru (5 posting teratas)
         if page.url == "index.html" {
             let recent: Vec<&PageContext> = blog_posts.iter().take(5).cloned().collect();
             context.insert("blog_posts", &recent);
         }
-
-        // Jika ini adalah halaman blog list /blog.html (jika ada), kita render dengan paginasi
-        // Untuk sederhana, kita buat halaman blog list statis dari template khusus (bisa juga via index)
-        // Di sini kita asumsikan pengguna membuat file blog/index.md untuk daftar blog, tapi kita
-        // juga bisa membuat otomatis halaman /blog.html dari data. Karena halaman blog mungkin sudah
-        // ada sebagai markdown, kita biarkan. Untuk keperluan demo, kita akan generate /blog.html
-        // jika tidak ada. Tapi untuk menjaga agar sederhana, kita skip dulu.
-        // Kita bisa menambahkan logika nanti jika dibutuhkan.
 
         let html = tera.render("base.html", &context)?;
         let out_path = Path::new(output_dir).join(&page.url);
@@ -107,10 +96,9 @@ pub fn compile_site(content_dir: &str, output_dir: &str) -> Result<()> {
             fs::create_dir_all(parent)?;
         }
         fs::write(&out_path, html)?;
-        println!("✅ Generated: {}", out_path.display());
+        println!("Generated: {}", out_path.display());
     }
 
-    // 10. Generate RSS feed
     let mut rss_context = TeraContext::new();
     rss_context.insert("config", &global_config);
     let rss_items: Vec<&PageContext> = blog_posts.iter().take(10).cloned().collect();
@@ -118,17 +106,16 @@ pub fn compile_site(content_dir: &str, output_dir: &str) -> Result<()> {
     rss_context.insert("base_url", &base_url);
     let rss = tera.render("rss.xml", &rss_context)?;
     fs::write(Path::new(output_dir).join("feed.xml"), rss)?;
-    println!("✅ Generated: feed.xml");
+    println!("Generated: feed.xml");
 
-    // 11. Generate sitemap
     let mut sitemap_context = TeraContext::new();
     sitemap_context.insert("pages", &pages);
     sitemap_context.insert("base_url", &base_url);
     let sitemap = tera.render("sitemap.xml", &sitemap_context)?;
     fs::write(Path::new(output_dir).join("sitemap.xml"), sitemap)?;
-    println!("✅ Generated: sitemap.xml");
+    println!("Generated: sitemap.xml");
 
-    println!("\n🎉 Situs selesai di-generate di folder '{}'", output_dir);
+    println!("Site generated in '{}'", output_dir);
     Ok(())
 }
 
@@ -150,8 +137,6 @@ fn build_base_context(
     ctx.insert("navbar", &config.navbar);
     ctx.insert("sidebar", &config.sidebar);
     ctx.insert("is_blog", &page.url.starts_with("blog/"));
-
-    // Tambahkan variable global
     ctx.insert("site_name", &config.site_name);
     ctx.insert("description", &config.description.as_deref().unwrap_or(""));
     ctx.insert("language", &config.language.as_deref().unwrap_or("en"));
@@ -169,7 +154,7 @@ fn relative_prefix(depth: usize) -> String {
 pub fn parse_markdown(raw: &str) -> Result<(PageFrontMatter, String)> {
     let trimmed = raw.trim_start();
     if !trimmed.starts_with("---") {
-        anyhow::bail!("Frontmatter tidak ditemukan (harus diawali '---')");
+        anyhow::bail!("Frontmatter not found (must start with '---')");
     }
 
     let without_first = trimmed.trim_start_matches("---").trim_start();
@@ -185,7 +170,7 @@ pub fn parse_markdown(raw: &str) -> Result<(PageFrontMatter, String)> {
         .trim();
 
     let fm: PageFrontMatter =
-        serde_yaml::from_str(yaml_str).context("Gagal parsing frontmatter YAML")?;
+        serde_yaml::from_str(yaml_str).context("Failed to parse frontmatter YAML")?;
 
     let md_html = markdown_to_html(markdown_str);
     Ok((fm, md_html))
@@ -203,8 +188,12 @@ fn markdown_to_html(md: &str) -> String {
 }
 
 pub fn generate_favicon_data_uri(name: &str) -> String {
-    // (sama seperti sebelumnya)
-    let first_char = name.chars().next().unwrap_or('R').to_uppercase().to_string();
+    let first_char = name
+        .chars()
+        .next()
+        .unwrap_or('R')
+        .to_uppercase()
+        .to_string();
     let hue = (name.bytes().fold(0u32, |a, b| a.wrapping_add(b as u32)) % 360) as u16;
     let bg_color = format!("hsl({}, 70%, 50%)", hue);
     let svg = format!(

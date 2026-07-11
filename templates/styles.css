@@ -1,16 +1,16 @@
 /* =========================================================
-   Manpage Terminal Template – styles.css
-   Full‑featured, accessible, responsive, with sidebar &
-   search. Works with rawssg placeholders.
+   rawssg – Terminal Manpage Styles (Refactored)
+   Modern, accessible, responsive, with sidebar & search.
    ========================================================= */
 
+/* ---------- CSS Custom Properties (Light/Dark) ---------- */
 :root {
   --bg: #0a0a0a;
   --text: #b0b0b0;
   --muted: #777;
   --heading: #e5e5e5;
   --accent: #8be9fd;
-  --accent-hover: #ffffff;
+  --accent-hover: #fff;
   --border: #2a2a2a;
   --code-bg: #141414;
   --pre-bg: #0d0d0d;
@@ -27,14 +27,14 @@
   --term-error: #ff5555;
   --term-warning: #f1fa8c;
   --strong-color: #e8e8e8;
-  --em-color: #cccccc;
+  --em-color: #ccc;
   --code-text: #c5c8c6;
   --pre-text: #c0c0c0;
   --table-header-bg: #0f0f0f;
   --overlay-bg: rgba(0, 0, 0, 0.8);
   --focus-ring: var(--accent);
   --sidebar-width: 220px;
-  --transition: 0.2s ease;
+  --transition-speed: 0.2s;
 }
 
 [data-theme="light"],
@@ -43,8 +43,8 @@ html.light {
   --text: #333;
   --muted: #666;
   --heading: #111;
-  --accent: #0066cc;
-  --accent-hover: #004499;
+  --accent: #06c;
+  --accent-hover: #048;
   --border: #ccc;
   --code-bg: #e8e8e8;
   --pre-bg: #f0f0f0;
@@ -65,6 +65,7 @@ html.light {
   --overlay-bg: rgba(0, 0, 0, 0.5);
 }
 
+/* ---------- Base Reset & Typography ---------- */
 *,
 *::before,
 *::after {
@@ -88,8 +89,8 @@ body {
   padding: 2rem 1.5rem;
   min-height: 100vh;
   transition:
-    background-color var(--transition),
-    color var(--transition);
+    background-color var(--transition-speed),
+    color var(--transition-speed);
   position: relative;
 }
 
@@ -98,7 +99,7 @@ body.no-transition * {
   transition: none !important;
 }
 
-/* ---------- Skip link ---------- */
+/* ---------- Accessibility: Skip Link & Focus ---------- */
 .skip-link {
   position: absolute;
   top: -100px;
@@ -113,7 +114,13 @@ body.no-transition * {
   top: 0;
 }
 
-/* ---------- Progress bar ---------- */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ---------- Progress Bar ---------- */
 .progress-bar {
   position: fixed;
   top: 0;
@@ -125,7 +132,7 @@ body.no-transition * {
   transition: width 0.1s linear;
 }
 
-/* ---------- Navbar (dari rawssg) ---------- */
+/* ---------- Top Navigation ---------- */
 .top-nav {
   max-width: 56rem;
   margin: 0 auto 1rem;
@@ -143,7 +150,7 @@ body.no-transition * {
   text-decoration: none;
   font-weight: 500;
   border-bottom: 1px solid transparent;
-  transition: border-color var(--transition);
+  transition: border-color var(--transition-speed);
 }
 .top-nav a:hover {
   border-bottom-color: var(--accent);
@@ -180,8 +187,8 @@ body.no-transition * {
   text-decoration: none;
   border-bottom: 1px solid transparent;
   transition:
-    color var(--transition),
-    border-color var(--transition);
+    color var(--transition-speed),
+    border-color var(--transition-speed);
 }
 .sidebar a:hover,
 .sidebar a.active {
@@ -201,7 +208,7 @@ body.no-transition * {
   border-radius: 4px;
   cursor: pointer;
   z-index: 91;
-  display: none; /* muncul hanya di layar kecil */
+  display: none;
 }
 
 @media (max-width: 850px) {
@@ -214,7 +221,7 @@ body.no-transition * {
   }
 }
 
-/* ---------- Layout utama ---------- */
+/* ---------- Main Content Area ---------- */
 .manpage {
   max-width: 48rem;
   margin: 0 auto;
@@ -245,12 +252,7 @@ body.no-transition * {
   margin-left: 2px;
   font-weight: 400;
 }
-
 @keyframes blink {
-  0%,
-  100% {
-    opacity: 1;
-  }
   50% {
     opacity: 0;
   }
@@ -292,15 +294,15 @@ body.no-transition * {
   text-decoration: none;
   border-bottom: 1px dashed var(--accent);
   transition:
-    color var(--transition),
-    border-color var(--transition);
+    color var(--transition-speed),
+    border-color var(--transition-speed);
 }
 .repo-link:hover {
   color: var(--accent-hover);
   border-bottom-color: var(--accent-hover);
 }
 
-/* ---------- Page tools (search & TOC) ---------- */
+/* ---------- Search & Table of Contents ---------- */
 .page-tools {
   margin: 2rem 0 1rem;
 }
@@ -313,7 +315,7 @@ body.no-transition * {
   padding: 0.4rem 0.8rem;
   margin-bottom: 1rem;
   opacity: 0.9;
-  transition: opacity var(--transition);
+  transition: opacity var(--transition-speed);
 }
 .term-search:hover {
   opacity: 1;
@@ -351,13 +353,12 @@ body.no-transition * {
   font-size: 1.2rem;
   cursor: pointer;
   padding: 0 0.3rem;
-  transition: color var(--transition);
+  transition: color var(--transition-speed);
 }
 .search-clear:hover {
   color: var(--accent);
 }
 
-/* Highlight */
 .search-highlight {
   background: rgba(139, 233, 253, 0.35);
   color: var(--heading);
@@ -367,10 +368,8 @@ body.no-transition * {
 .search-highlight.current {
   background: var(--accent);
   color: #000;
-  border-radius: 2px;
 }
 
-/* TOC */
 .toc-toggle {
   background: none;
   border: 1px solid var(--border);
@@ -381,7 +380,7 @@ body.no-transition * {
   border-radius: 3px;
   cursor: pointer;
   margin-bottom: 0.8rem;
-  transition: background var(--transition);
+  transition: background var(--transition-speed);
 }
 .toc-toggle:hover {
   background: var(--code-bg);
@@ -412,8 +411,8 @@ body.no-transition * {
   text-decoration: none;
   border-bottom: 1px solid transparent;
   transition:
-    border-color var(--transition),
-    color var(--transition);
+    border-color var(--transition-speed),
+    color var(--transition-speed);
 }
 .man-toc a:hover,
 .man-toc a.active {
@@ -421,7 +420,7 @@ body.no-transition * {
   border-bottom-color: var(--accent);
 }
 
-/* ---------- Content (markdown) ---------- */
+/* ---------- Article Content ---------- */
 .content {
   margin-top: 2rem;
   line-height: 1.8;
@@ -429,19 +428,8 @@ body.no-transition * {
 .content > * + * {
   margin-top: 1.5rem;
 }
-.content h1,
-.content h2,
-.content h3,
-.content h4,
-.content h5,
-.content h6 {
-  color: var(--heading);
-  font-weight: 700;
-  margin-top: 2.5rem;
-  margin-bottom: 0.75rem;
-  line-height: 1.3;
-  scroll-margin-top: 2rem; /* for anchor scroll */
-}
+
+/* Headings */
 .content h1 {
   font-size: 1.9rem;
 }
@@ -468,6 +456,21 @@ body.no-transition * {
   text-transform: uppercase;
   color: var(--muted);
 }
+.content h1,
+.content h2,
+.content h3,
+.content h4,
+.content h5,
+.content h6 {
+  color: var(--heading);
+  font-weight: 700;
+  margin-top: 2.5rem;
+  margin-bottom: 0.75rem;
+  line-height: 1.3;
+  scroll-margin-top: 2rem;
+}
+
+/* Inline elements */
 .content p {
   margin-bottom: 1.2rem;
 }
@@ -489,13 +492,15 @@ body.no-transition * {
   text-decoration: none;
   border-bottom: 1px dashed var(--accent);
   transition:
-    color var(--transition),
-    border-color var(--transition);
+    color var(--transition-speed),
+    border-color var(--transition-speed);
 }
 .content a:hover {
   color: var(--accent-hover);
   border-bottom-color: var(--accent-hover);
 }
+
+/* Lists */
 .content ul,
 .content ol {
   padding-left: 2rem;
@@ -524,6 +529,8 @@ body.no-transition * {
   color: var(--muted);
   min-width: 1.5em;
 }
+
+/* Quotes, code, tables */
 .content blockquote {
   margin: 1.5rem 0;
   padding: 1rem 1.5rem;
@@ -550,7 +557,6 @@ body.no-transition * {
   font-size: 0.9rem;
   line-height: 1.6;
   color: var(--pre-text);
-  position: relative;
 }
 .content pre code {
   background: none;
@@ -597,7 +603,7 @@ body.no-transition * {
   color: var(--text);
 }
 
-/* ---------- Copy button ---------- */
+/* ---------- Code Block Copy Button ---------- */
 .code-block {
   position: relative;
   margin: 1.5rem 0;
@@ -619,8 +625,8 @@ body.no-transition * {
   cursor: pointer;
   opacity: 0;
   transition:
-    opacity var(--transition),
-    color var(--transition);
+    opacity var(--transition-speed),
+    color var(--transition-speed);
   padding: 0.2rem 0.4rem;
   display: flex;
   align-items: center;
@@ -637,14 +643,14 @@ body.no-transition * {
 .copy-btn .copy-check {
   opacity: 0;
   font-size: 0.9rem;
-  transition: opacity var(--transition);
+  transition: opacity var(--transition-speed);
   margin-left: 0.2rem;
 }
 .copy-btn.copied .copy-check {
   opacity: 1;
 }
 
-/* ---------- Back to top ---------- */
+/* ---------- Back to Top ---------- */
 .back-to-top {
   position: fixed;
   bottom: 2rem;
@@ -659,8 +665,8 @@ body.no-transition * {
   opacity: 0;
   visibility: hidden;
   transition:
-    opacity var(--transition),
-    visibility var(--transition);
+    opacity var(--transition-speed),
+    visibility var(--transition-speed);
   border-radius: 3px;
   z-index: 50;
 }
@@ -669,7 +675,7 @@ body.no-transition * {
   visibility: visible;
 }
 
-/* ---------- Help modal ---------- */
+/* ---------- Help Modal ---------- */
 .help-modal {
   position: fixed;
   inset: 0;
@@ -720,19 +726,19 @@ body.no-transition * {
   cursor: pointer;
   display: block;
   margin-left: auto;
-  transition: background var(--transition);
+  transition: background var(--transition-speed);
 }
 .help-close:hover {
   background: var(--code-bg);
 }
 
+/* ---------- Footer ---------- */
 .no-js-warning {
   color: var(--term-warning);
   text-align: center;
   margin-top: 2rem;
   font-style: italic;
 }
-
 .page-footer {
   margin-top: 3rem;
   padding-top: 1.5rem;
@@ -742,17 +748,29 @@ body.no-transition * {
   text-align: left;
 }
 
-/* ---------- Focus visible ---------- */
-a:focus-visible,
-button:focus-visible,
-input:focus-visible,
-[tabindex]:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-  border-radius: 2px;
+/* ---------- Responsive & Print ---------- */
+@media (max-width: 600px) {
+  body {
+    padding: 1rem;
+  }
+  .title {
+    font-size: 1.8rem;
+  }
+  .meta strong {
+    min-width: 8rem;
+  }
+  .term-search {
+    flex-wrap: wrap;
+  }
+  .man-toc {
+    max-height: 40vh;
+  }
+  .back-to-top {
+    bottom: 1rem;
+    right: 1rem;
+  }
 }
 
-/* ---------- Reduced motion ---------- */
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -770,11 +788,10 @@ input:focus-visible,
   }
 }
 
-/* ---------- Print ---------- */
 @media print {
   body {
-    background: white;
-    color: black;
+    background: #fff;
+    color: #000;
     padding: 0;
   }
   .progress-bar,
@@ -796,7 +813,7 @@ input:focus-visible,
   .synopsis,
   .meta,
   .content {
-    color: black;
+    color: #000;
   }
   .content pre {
     border: 1px solid #ccc;
@@ -809,28 +826,5 @@ input:focus-visible,
   }
   .repo-link::after {
     content: "";
-  }
-}
-
-/* ---------- Responsive ---------- */
-@media (max-width: 600px) {
-  body {
-    padding: 1rem;
-  }
-  .title {
-    font-size: 1.8rem;
-  }
-  .meta strong {
-    min-width: 8rem;
-  }
-  .term-search {
-    flex-wrap: wrap;
-  }
-  .man-toc {
-    max-height: 40vh;
-  }
-  .back-to-top {
-    bottom: 1rem;
-    right: 1rem;
   }
 }

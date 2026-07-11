@@ -46,7 +46,10 @@ fn main() {
         .status()
         .map(|s| !s.success())
         .unwrap_or(false);
-    println!("cargo:rustc-env=GIT_DIRTY={}", if dirty { "yes" } else { "no" });
+    println!(
+        "cargo:rustc-env=GIT_DIRTY={}",
+        if dirty { "yes" } else { "no" }
+    );
 
     // Rebuild hanya jika file ini atau HEAD berubah
     println!("cargo:rerun-if-changed=build.rs");

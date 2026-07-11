@@ -7,36 +7,41 @@ mod types;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use std::sync::LazyLock;
 
-fn print_manual() {
-    println!("rawssg - Static Site Generator dengan vibe terminal\n");
-    println!("USAGE:");
-    println!("    rawssg <COMMAND>\n");
-    println!("COMMANDS:");
-    println!("    help                  Tampilkan panduan ini");
-    println!("    version               Tampilkan versi");
-    println!("    info                  Metadata build");
-    println!("    create [kind]         Buat halaman baru (index atau blog)");
-    println!("    config <ACTION>       Manajemen konfigurasi");
-    println!("    compile [SRC] [DST]   Build situs (default: content/ -> dist/)");
-    println!("    serve [PORT]          Jalankan server lokal (default: 3000)");
+fn build_info_string() -> String {
+    format!(
+        "rawssg v{}\n\
+         Build date       : {}\n\
+         Profile          : {}\n\
+         Target           : {}\n\
+         Rust compiler    : {}\n\
+         Git commit       : {}\n\
+         Git branch       : {}\n\
+         Working tree     : {}",
+        env!("CARGO_PKG_VERSION"),
+        env!("BUILD_DATE"),
+        env!("PROFILE"),
+        env!("TARGET"),
+        env!("RUST_VERSION"),
+        env!("GIT_HASH"),
+        env!("GIT_BRANCH"),
+        if env!("GIT_DIRTY") == "yes" {
+            "dirty (uncommitted changes)"
+        } else {
+            "clean"
+        }
+    )
 }
 
-fn print_build_info() {
-    println!("rawssg v{}", env!("CARGO_PKG_VERSION"));
-    println!("Build date       : {}", env!("BUILD_DATE"));
-    println!("Profile          : {}", env!("PROFILE"));
-    println!("Target           : {}", env!("TARGET"));
-    println!("Rust compiler    : {}", env!("RUST_VERSION"));
-    println!("Git commit       : {}", env!("GIT_HASH"));
-    println!("Git branch       : {}", env!("GIT_BRANCH"));
-    println!("Working tree     : {}", if env!("GIT_DIRTY") == "yes" { "dirty (uncommitted changes)" } else { "clean" });
-}
+// Static version string computed once at runtime and living forever.
+static VERSION_INFO: LazyLock<String> = LazyLock::new(build_info_string);
 
-
+/// A static site generator with terminal aesthetics.
 #[derive(Parser)]
 #[command(name = "rawssg")]
-#[command(about = "Static site generator dengan vibe terminal", long_about = None)]
+#[command(version = VERSION_INFO.as_str())]
+#[command(about, long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -44,49 +49,56 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    Help,
-    Version,
+    /// Display build metadata
     Info,
-    /// Buat halaman baru secara interaktif
+    /// Create a new page interactively
     Create {
-        /// Jenis halaman: kosong untuk index, "blog" untuk posting blog
+        /// Type of page: "blog" for a blog post, omit for an index page
         kind: Option<String>,
     },
-    /// Manajemen konfigurasi
+    /// Manage site configuration
     Config {
         #[command(subcommand)]
         action: ConfigAction,
     },
-    /// Build situs statis
+    /// Build the static site from markdown sources
     Compile {
+        /// Source content directory (default: "content")
         content_dir: Option<String>,
+        /// Output directory (default: "dist")
         output_dir: Option<String>,
     },
-    /// Jalankan server lokal
+    /// Start a local development server
     Serve {
+        /// Port to listen on (default: 3000)
         port: Option<u16>,
     },
 }
 
 #[derive(Subcommand)]
 enum ConfigAction {
-    /// Tampilkan konfigurasi saat ini
+    /// Show the current configuration
     Show,
-    /// Atur nilai konfigurasi: config set <key> <value>
+    /// Set a configuration value: key value
     Set {
+        /// Configuration key
         key: String,
+        /// Value to set
         value: String,
     },
-    /// Tambah item navigasi: config add-nav <label> <url>
+    /// Add a navigation item: label url
     AddNav {
+        /// Link label
         label: String,
+        /// Link URL
         url: String,
     },
-    /// Hapus item navigasi berdasarkan indeks: config remove-nav <index>
+    /// Remove a navigation item by its index
     RemoveNav {
+        /// Index of the navigation item to remove
         index: usize,
     },
-    /// Validasi semua file markdown
+    /// Validate all markdown files in the content directory
     Check,
 }
 
@@ -94,15 +106,13 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Help => print_manual(),
-        Commands::Version => println!("rawssg v{}", env!("CARGO_PKG_VERSION")),
-        Commands::Info => print_build_info(),
-        Commands::Create { kind } => {
-            match kind.as_deref() {
-                Some("blog") => create::create_blog_post()?,
-                _ => create::create_index_page()?,
-            }
+        Commands::Info => {
+            println!("{}", build_info_string());
         }
+        Commands::Create { kind } => match kind.as_deref() {
+            Some("blog") => create::create_blog_post()?,
+            _ => create::create_index_page()?,
+        },
         Commands::Config { action } => match action {
             ConfigAction::Show => config::show_current_config()?,
             ConfigAction::Set { key, value } => config::set_config_value(&key, &value)?,
@@ -110,7 +120,10 @@ fn main() -> Result<()> {
             ConfigAction::RemoveNav { index } => config::remove_nav_item(index)?,
             ConfigAction::Check => config::validate_all()?,
         },
-        Commands::Compile { content_dir, output_dir } => {
+        Commands::Compile {
+            content_dir,
+            output_dir,
+        } => {
             let content = content_dir.as_deref().unwrap_or("content");
             let output = output_dir.as_deref().unwrap_or("dist");
             compiler::compile_site(content, output)?;
