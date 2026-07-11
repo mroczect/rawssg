@@ -8,8 +8,31 @@ mod types;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-fn print_manual() { /* ... tetap ... */ }
-fn print_build_info() { /* ... tetap ... */ }
+fn print_manual() {
+    println!("rawssg - Static Site Generator dengan vibe terminal\n");
+    println!("USAGE:");
+    println!("    rawssg <COMMAND>\n");
+    println!("COMMANDS:");
+    println!("    help                  Tampilkan panduan ini");
+    println!("    version               Tampilkan versi");
+    println!("    info                  Metadata build");
+    println!("    create [kind]         Buat halaman baru (index atau blog)");
+    println!("    config <ACTION>       Manajemen konfigurasi");
+    println!("    compile [SRC] [DST]   Build situs (default: content/ -> dist/)");
+    println!("    serve [PORT]          Jalankan server lokal (default: 3000)");
+}
+
+fn print_build_info() {
+    println!("rawssg v{}", env!("CARGO_PKG_VERSION"));
+    println!("Build date       : {}", env!("BUILD_DATE"));
+    println!("Profile          : {}", env!("PROFILE"));
+    println!("Target           : {}", env!("TARGET"));
+    println!("Rust compiler    : {}", env!("RUST_VERSION"));
+    println!("Git commit       : {}", env!("GIT_HASH"));
+    println!("Git branch       : {}", env!("GIT_BRANCH"));
+    println!("Working tree     : {}", if env!("GIT_DIRTY") == "yes" { "dirty (uncommitted changes)" } else { "clean" });
+}
+
 
 #[derive(Parser)]
 #[command(name = "rawssg")]

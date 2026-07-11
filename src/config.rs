@@ -4,12 +4,27 @@ use anyhow::{Context, Result};
 use std::fs;
 use walkdir::WalkDir;
 use crate::types::NavItem;
+use std::path::Path;
 
 pub fn load_config(path: &str) -> Result<GlobalConfig> {
     let yaml = fs::read_to_string(path)
         .with_context(|| format!("Gagal membaca config file '{}'", path))?;
     let config: GlobalConfig = serde_yaml::from_str(&yaml).context("Gagal parsing config.yaml")?;
     Ok(config)
+}
+
+pub fn load_config_or_default(path: &str) -> Result<GlobalConfig> {
+    if !Path::new(path).exists() {
+        return Ok(GlobalConfig {
+            navbar: Vec::new(),
+            sidebar: Vec::new(),
+            site_name: "rawssg".into(),
+            description: None,
+            language: None,
+            base_url: None,
+        });
+    }
+    load_config(path)
 }
 
 pub fn validate_all() -> Result<()> {

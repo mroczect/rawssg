@@ -131,6 +131,7 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
+ "serde",
  "wasm-bindgen",
  "windows-link",
 ]
@@ -496,6 +497,7 @@ dependencies = [
  "pulldown-cmark",
  "serde",
  "serde_yaml",
+ "tera",
  "thiserror",
  "tiny_http",
  "walkdir",
@@ -592,6 +594,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "tera"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38ea62bd58771b570262e11ffa274fa9eda9986bd886e6e3a1f7f42afef8024c"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
