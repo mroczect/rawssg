@@ -10,8 +10,7 @@ license: "MIT"
 
 RawSSG is distributed under the **MIT License**, a permissive open‑source licence that allows you to use, modify, and share the software with minimal restrictions.
 
----
-
+```txt
 ## MIT License
 
 Copyright (c) 2026 mroczect
