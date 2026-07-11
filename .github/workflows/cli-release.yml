@@ -1,0 +1,156 @@
+name: CLI Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "cli-v*"
+
+jobs:
+  # ------------------------------------------------------------------
+  # Build CLI binaries
+  # ------------------------------------------------------------------
+  build-cli:
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      BINARY_NAME: rawssg
+      ARTIFACT_NAME: rawssg-${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          rustup update stable
+          rustup default stable
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Smoke test the binary
+        run: |
+          output=$("./target/release/$BINARY_NAME" info)
+          if [ -z "$output" ]; then
+            echo "ERROR: CLI test failed"
+            exit 1
+          fi
+
+      - name: Package binary for upload
+        run: |
+          mkdir -p upload
+          cp "./target/release/$BINARY_NAME" upload/
+          tar -czf "$ARTIFACT_NAME.tar.gz" -C upload "$BINARY_NAME"
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.ARTIFACT_NAME }}.tar.gz
+
+  # ------------------------------------------------------------------
+  # Generate installer script
+  # ------------------------------------------------------------------
+  generate-installer:
+    needs: build-cli
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/cli-v')
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Create installer.sh
+        run: |
+          cat << 'EOF' > installer.sh
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
+          OS="$(uname -s)"
+
+          case "$OS" in
+              Linux)  PLATFORM="ubuntu-latest" ;;
+              Darwin) PLATFORM="macos-latest" ;;
+              *)
+                  echo "Unsupported OS: $OS"
+                  exit 1
+                  ;;
+          esac
+
+          RELEASE_TAG="__RELEASE_TAG__"
+          BASE_URL="https://github.com/__GITHUB_REPOSITORY__/releases/download/${RELEASE_TAG}"
+          FILENAME="rawssg-${PLATFORM}.tar.gz"
+
+          echo "Downloading $FILENAME from $BASE_URL ..."
+          curl -fsSL "${BASE_URL}/${FILENAME}" -o "/tmp/${FILENAME}"
+
+          echo "Extracting..."
+          tar -xzf "/tmp/${FILENAME}" -C /tmp/
+
+          echo "Installing rawssg to ${INSTALL_DIR} ..."
+          sudo install -m 755 /tmp/rawssg "${INSTALL_DIR}/rawssg"
+
+          if command -v rawssg >/dev/null 2>&1; then
+              echo "rawssg installed successfully!"
+              rawssg --version 2>&1 || true
+          else
+              echo "Installation failed."
+              exit 1
+          fi
+          EOF
+          chmod +x installer.sh
+
+      - name: Inject placeholders into installer
+        run: |
+          sed -i "s|__RELEASE_TAG__|${RELEASE_TAG}|g" installer.sh
+          sed -i "s|__GITHUB_REPOSITORY__|${REPO}|g" installer.sh
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer
+          path: installer.sh
+
+  # ------------------------------------------------------------------
+  # Create GitHub Release with binaries + installer
+  # ------------------------------------------------------------------
+  release:
+    if: startsWith(github.ref, 'refs/tags/cli-v') || github.event_name == 'workflow_dispatch'
+    needs: [build-cli, generate-installer]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Display artifact structure
+        run: ls -R
+
+      - name: Collect release assets
+        run: |
+          find . -name "*.tar.gz" -exec mv {} . \;
+          find . -name "installer.sh" -exec mv {} . \;
+          ls -lh
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag: ${{ github.ref_name }}
+          artifacts: "*.tar.gz,installer.sh"
+          body: |
+            ## RawSSG CLI Release ${{ github.ref_name }}
+
+            Pre-built command-line tool for:
+            - Linux (x86_64) → `rawssg-ubuntu-latest.tar.gz`
+            - macOS → `rawssg-macos-latest.tar.gz`
+
+            ### Quick install
+            ```bash
+            curl -fsSL https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/installer.sh | bash
