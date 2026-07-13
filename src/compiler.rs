@@ -4,35 +4,28 @@ use crate::types::{GlobalConfig, PageContext, PageFrontMatter};
 use anyhow::{Context, Result};
 use base64::Engine;
 use chrono::{NaiveTime, TimeZone, Utc};
-use pulldown_cmark::{html, Options, Parser};
+use pulldown_cmark::{Options, Parser, html};
 use std::fs;
 use std::path::Path;
 use tera::{Context as TeraContext, Tera};
 use walkdir::WalkDir;
 
 pub fn compile_site(content_dir: &str, output_dir: &str) -> Result<()> {
-    // 1. Bersihkan & siapkan direktori output
     if Path::new(output_dir).exists() {
         fs::remove_dir_all(output_dir)
             .with_context(|| format!("Failed to clean output directory '{}'", output_dir))?;
     }
     fs::create_dir_all(output_dir)
         .with_context(|| format!("Failed to create output directory '{}'", output_dir))?;
-
-    // 2. Salin folder static jika ada
     if Path::new("static").exists() {
         copy_dir_all("static", output_dir)?;
     }
-
-    // 3. Tulis file CSS & JS bawaan
     let css_dest = Path::new(output_dir).join("styles.css");
     fs::write(&css_dest, embedded::STYLES_CSS)
         .with_context(|| format!("Failed to write {}", css_dest.display()))?;
     let js_dest = Path::new(output_dir).join("script.js");
     fs::write(&js_dest, embedded::SCRIPT_JS)
         .with_context(|| format!("Failed to write {}", js_dest.display()))?;
-
-    // 4. Muat konfigurasi global
     let global_config = config::load_config_or_default("config.yaml")?;
     let site_name = &global_config.site_name;
     let favicon_data_uri = generate_favicon_data_uri(site_name);
@@ -40,14 +33,10 @@ pub fn compile_site(content_dir: &str, output_dir: &str) -> Result<()> {
         .base_url
         .as_deref()
         .unwrap_or("http://localhost:3000");
-
-    // 5. Siapkan Tera
     let mut tera = Tera::default();
     tera.add_raw_template("base.html", embedded::INDEX_TEMPLATE)?;
     tera.add_raw_template("rss.xml", embedded::RSS_TEMPLATE)?;
     tera.add_raw_template("sitemap.xml", embedded::SITEMAP_TEMPLATE)?;
-
-    // 6. Kumpulkan semua halaman dari file .md
     let mut pages: Vec<PageContext> = Vec::new();
     for entry in WalkDir::new(content_dir) {
         let entry = entry?;
@@ -86,8 +75,7 @@ pub fn compile_site(content_dir: &str, output_dir: &str) -> Result<()> {
 
         let pub_date = fm.date.map(|d| {
             let dt = Utc.from_utc_datetime(
-                &d.and_time(NaiveTime::from_hms_opt(0, 0, 0)
-                    .expect("00:00:00 is a valid time")),
+                &d.and_time(NaiveTime::from_hms_opt(0, 0, 0).expect("00:00:00 is a valid time")),
             );
             dt.format("%a, %d %b %Y %H:%M:%S %z").to_string()
         });
@@ -102,7 +90,6 @@ pub fn compile_site(content_dir: &str, output_dir: &str) -> Result<()> {
         });
     }
 
-    // 7. Bangun daftar posting blog (owned, agar bebas memodifikasi pages nanti)
     let mut blog_posts: Vec<PageContext> = pages
         .iter()
         .filter(|p| p.url.starts_with("blog/"))
@@ -115,7 +102,6 @@ pub fn compile_site(content_dir: &str, output_dir: &str) -> Result<()> {
             .then_with(|| a.frontmatter.title.cmp(&b.frontmatter.title))
     });
 
-    // 8. Buat halaman indeks blog (jika ada posting & belum ada file index.md khusus)
     if !blog_posts.is_empty() && !pages.iter().any(|p| p.url == "blog/index.html") {
         let mut list_html = String::from("<ul>\n");
         for post in &blog_posts {
@@ -146,11 +132,9 @@ pub fn compile_site(content_dir: &str, output_dir: &str) -> Result<()> {
         pages.push(blog_index);
     }
 
-    // 9. Render setiap halaman
     for page in &pages {
         let mut context = build_base_context(&global_config, page, &favicon_data_uri)?;
 
-        // Tampilkan 5 posting terbaru di halaman utama
         if page.url == "index.html" {
             let recent: Vec<&PageContext> = blog_posts.iter().take(5).collect();
             context.insert("blog_posts", &recent);
@@ -169,7 +153,6 @@ pub fn compile_site(content_dir: &str, output_dir: &str) -> Result<()> {
         println!("Generated: {}", out_path.display());
     }
 
-    // 10. RSS feed
     let mut rss_context = TeraContext::new();
     rss_context.insert("config", &global_config);
     let rss_items: Vec<&PageContext> = blog_posts.iter().take(10).collect();
