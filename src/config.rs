@@ -46,6 +46,12 @@ pub fn set_config_value(key: &str, value: &str) -> Result<()> {
     let mut config = load_config("config.yaml")?;
     match key {
         "site_name" => config.site_name = value.to_string(),
+        "description" => config.description = Some(value.to_string()),
+        "language" => config.language = Some(value.to_string()),
+        "base_url" => config.base_url = Some(value.to_string()),
+        "author" => config.author = Some(value.to_string()),
+        "repo_url" => config.repo_url = Some(value.to_string()),
+        "license" => config.license = Some(value.to_string()),
         _ => {
             if key.starts_with("navbar.") {
                 let parts: Vec<&str> = key.split('.').collect();
@@ -62,6 +68,23 @@ pub fn set_config_value(key: &str, value: &str) -> Result<()> {
                     }
                 } else {
                     anyhow::bail!("Invalid navbar key format. Use navbar.<index>.<label|url>");
+                }
+            } else if key.starts_with("sidebar.") {
+                let parts: Vec<&str> = key.split('.').collect();
+                if parts.len() == 3 {
+                    let index: usize =
+                        parts[1].parse().context("Sidebar index must be a number")?;
+                    let field = parts[2];
+                    if index >= config.sidebar.len() {
+                        anyhow::bail!("Sidebar index out of bounds");
+                    }
+                    match field {
+                        "label" => config.sidebar[index].label = value.to_string(),
+                        "url" => config.sidebar[index].url = value.to_string(),
+                        _ => anyhow::bail!("Unknown sidebar field: {}", field),
+                    }
+                } else {
+                    anyhow::bail!("Invalid sidebar key format. Use sidebar.<index>.<label|url>");
                 }
             } else {
                 anyhow::bail!("Unknown configuration key: {}", key);
@@ -99,11 +122,37 @@ pub fn remove_nav_item(index: usize) -> Result<()> {
     Ok(())
 }
 
+pub fn add_sidebar_item(label: &str, url: &str) -> Result<()> {
+    let mut config = load_config("config.yaml")?;
+    config.sidebar.push(NavItem {
+        label: label.to_string(),
+        url: url.to_string(),
+    });
+    save_config(&config)?;
+    println!("Sidebar item '{}' added.", label);
+    Ok(())
+}
+
+pub fn remove_sidebar_item(index: usize) -> Result<()> {
+    let mut config = load_config("config.yaml")?;
+    if index >= config.sidebar.len() {
+        anyhow::bail!(
+            "Sidebar index {} out of bounds (total items: {})",
+            index,
+            config.sidebar.len()
+        );
+    }
+    let removed = config.sidebar.remove(index);
+    save_config(&config)?;
+    println!("Sidebar item '{}' removed.", removed.label);
+    Ok(())
+}
+
 pub fn validate_all() -> Result<()> {
     for entry in WalkDir::new("content") {
         let entry = entry?;
         let path = entry.path();
-        if path.extension().unwrap_or_default() == "md" {
+        if path.extension().map_or(false, |ext| ext == "md") {
             let raw = fs::read_to_string(path)?;
             match compiler::parse_markdown(&raw) {
                 Ok(_) => println!("OK: {}", path.display()),
