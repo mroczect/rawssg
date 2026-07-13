@@ -25,7 +25,7 @@ fn default_site_name() -> String {
     "rawssg".to_string()
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct PageFrontMatter {
     pub title: String,
     pub desc: String,
@@ -43,12 +43,12 @@ pub struct PageFrontMatter {
     pub draft: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct PageContext {
     pub frontmatter: PageFrontMatter,
     pub content_html: String,
     pub url: String,
     pub file_path: String,
     pub depth: usize,
-    pub pub_date: Option<String>, 
+    pub pub_date: Option<String>,
 }
