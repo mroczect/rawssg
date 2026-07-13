@@ -1,10 +1,10 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use notify::{Event, EventKind, RecursiveMode, Watcher};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc;
-use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tiny_http::{Header, Response, Server};
@@ -52,18 +52,20 @@ pub fn start_server(output_dir: &str, port: u16) -> Result<()> {
 
     let reload_counter = Arc::new(AtomicU32::new(0));
     let counter_for_rebuild = reload_counter.clone();
-    thread::spawn(move || loop {
-        match rx.recv() {
-            Ok(()) => {
-                println!("Change detected, rebuilding...");
-                if let Err(e) = crate::compiler::compile_site("content", "dist") {
-                    eprintln!("Rebuild error: {}", e);
-                } else {
-                    counter_for_rebuild.fetch_add(1, Ordering::SeqCst);
-                    println!("Rebuild complete.");
+    thread::spawn(move || {
+        loop {
+            match rx.recv() {
+                Ok(()) => {
+                    println!("Change detected, rebuilding...");
+                    if let Err(e) = crate::compiler::compile_site("content", "dist") {
+                        eprintln!("Rebuild error: {}", e);
+                    } else {
+                        counter_for_rebuild.fetch_add(1, Ordering::SeqCst);
+                        println!("Rebuild complete.");
+                    }
                 }
+                Err(_) => break,
             }
-            Err(_) => break,
         }
     });
 
@@ -135,14 +137,13 @@ fn handle_request(
     match fs::read(&canonical_file) {
         Ok(content) => {
             let mime = mime_type(&canonical_file);
-            let header = Header::from_bytes("Content-Type", mime.as_str())
-                .expect("Invalid MIME header");
+            let header =
+                Header::from_bytes("Content-Type", mime.as_str()).expect("Invalid MIME header");
             let response = Response::from_data(content).with_header(header);
             request.respond(response)?;
         }
         Err(_) => {
-            let response =
-                Response::from_string("500 Internal Server Error").with_status_code(500);
+            let response = Response::from_string("500 Internal Server Error").with_status_code(500);
             request.respond(response)?;
         }
     }

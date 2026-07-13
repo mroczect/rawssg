@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use chrono::Local;
 use std::fs;
 use std::io::{self, Write};
@@ -13,21 +13,50 @@ fn prompt(question: &str) -> Result<String> {
     io::stdout().flush()?;
     let mut input = String::new();
     io::stdin().read_line(&mut input)?;
-    Ok(input.trim().to_string())
+    let input = input.trim().to_string();
+    if input.is_empty() {
+        bail!("This field cannot be empty");
+    }
+    Ok(input)
+}
+
+fn prompt_with_default(question: &str, default: &str) -> Result<String> {
+    if default.is_empty() {
+        return prompt(question);
+    }
+    print!("{} [{}]: ", question, default);
+    io::stdout().flush()?;
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    let input = input.trim().to_string();
+    if input.is_empty() {
+        Ok(default.to_string())
+    } else {
+        Ok(input)
+    }
+}
+
+fn load_config_defaults() -> (String, String, String) {
+    match crate::config::load_config("config.yaml") {
+        Ok(config) => (
+            config.author.unwrap_or_default(),
+            config.repo_url.unwrap_or_default(),
+            config.license.unwrap_or_default(),
+        ),
+        Err(_) => (String::new(), String::new(), String::new()),
+    }
 }
 
 pub fn create_index_page() -> Result<()> {
     println!("Creating index page (homepage)...");
 
-    let title = prompt("Title")?;
-    if title.trim().is_empty() {
-        anyhow::bail!("Title cannot be empty");
-    }
+    let (default_author, default_repo, default_license) = load_config_defaults();
 
+    let title = prompt("Title")?;
     let desc = prompt("Description")?;
-    let author = prompt("Author (leave empty to use config default)")?;
-    let repo_url = prompt("Repository URL (leave empty to use config default)")?;
-    let license = prompt("License (leave empty to use config default)")?;
+    let author = prompt_with_default("Author", &default_author)?;
+    let repo_url = prompt_with_default("Repository URL", &default_repo)?;
+    let license = prompt_with_default("License", &default_license)?;
 
     let mut fm = format!(
         "---\ntitle: \"{}\"\ndesc: \"{}\"",
@@ -66,15 +95,13 @@ pub fn create_index_page() -> Result<()> {
 pub fn create_blog_post() -> Result<()> {
     println!("Creating new blog post...");
 
-    let title = prompt("Title")?;
-    if title.trim().is_empty() {
-        anyhow::bail!("Title cannot be empty");
-    }
+    let (default_author, default_repo, default_license) = load_config_defaults();
 
+    let title = prompt("Title")?;
     let desc = prompt("Description")?;
-    let author = prompt("Author")?;
-    let repo_url = prompt("Repository URL")?;
-    let license = prompt("License")?;
+    let author = prompt_with_default("Author", &default_author)?;
+    let repo_url = prompt_with_default("Repository URL", &default_repo)?;
+    let license = prompt_with_default("License", &default_license)?;
 
     let slug = title
         .to_lowercase()
@@ -93,7 +120,7 @@ pub fn create_blog_post() -> Result<()> {
         .join("-");
 
     if slug.is_empty() {
-        anyhow::bail!("Cannot generate a valid slug from the title");
+        bail!("Cannot generate a valid slug from the title");
     }
 
     let today = Local::now().date_naive().format("%Y-%m-%d").to_string();
@@ -123,15 +150,13 @@ pub fn create_blog_post() -> Result<()> {
 pub fn create_page() -> Result<()> {
     println!("Creating new page...");
 
-    let title = prompt("Title")?;
-    if title.trim().is_empty() {
-        anyhow::bail!("Title cannot be empty");
-    }
+    let (default_author, default_repo, default_license) = load_config_defaults();
 
+    let title = prompt("Title")?;
     let desc = prompt("Description")?;
-    let author = prompt("Author")?;
-    let repo_url = prompt("Repository URL")?;
-    let license = prompt("License")?;
+    let author = prompt_with_default("Author", &default_author)?;
+    let repo_url = prompt_with_default("Repository URL", &default_repo)?;
+    let license = prompt_with_default("License", &default_license)?;
 
     let slug = title
         .to_lowercase()
@@ -150,12 +175,12 @@ pub fn create_page() -> Result<()> {
         .join("-");
 
     if slug.is_empty() {
-        anyhow::bail!("Cannot generate a valid slug from the title");
+        bail!("Cannot generate a valid slug from the title");
     }
 
     let file_path = Path::new("content").join(format!("{}.md", slug));
     if file_path.exists() {
-        anyhow::bail!("File already exists: {}", file_path.display());
+        bail!("File already exists: {}", file_path.display());
     }
 
     let frontmatter = format!(
