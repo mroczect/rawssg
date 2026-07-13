@@ -5,11 +5,20 @@ mod embedded;
 mod serve;
 mod types;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::sync::LazyLock;
 
 fn build_info_string() -> String {
+    let version = option_env!("CARGO_PKG_VERSION").unwrap_or("unknown");
+    let build_date = option_env!("BUILD_DATE").unwrap_or("unknown");
+    let profile = option_env!("PROFILE").unwrap_or("unknown");
+    let target = option_env!("TARGET").unwrap_or("unknown");
+    let rust_version = option_env!("RUST_VERSION").unwrap_or("unknown");
+    let git_hash = option_env!("GIT_HASH").unwrap_or("unknown");
+    let git_branch = option_env!("GIT_BRANCH").unwrap_or("unknown");
+    let git_dirty = option_env!("GIT_DIRTY").unwrap_or("no");
+
     format!(
         "rawssg v{}\n\
          Build date       : {}\n\
@@ -19,14 +28,14 @@ fn build_info_string() -> String {
          Git commit       : {}\n\
          Git branch       : {}\n\
          Working tree     : {}",
-        env!("CARGO_PKG_VERSION"),
-        env!("BUILD_DATE"),
-        env!("PROFILE"),
-        env!("TARGET"),
-        env!("RUST_VERSION"),
-        env!("GIT_HASH"),
-        env!("GIT_BRANCH"),
-        if env!("GIT_DIRTY") == "yes" {
+        version,
+        build_date,
+        profile,
+        target,
+        rust_version,
+        git_hash,
+        git_branch,
+        if git_dirty == "yes" {
             "dirty (uncommitted changes)"
         } else {
             "clean"
@@ -34,7 +43,6 @@ fn build_info_string() -> String {
     )
 }
 
-// Static version string computed once at runtime and living forever.
 static VERSION_INFO: LazyLock<String> = LazyLock::new(build_info_string);
 
 /// A static site generator with terminal aesthetics.
@@ -51,16 +59,17 @@ struct Cli {
 enum Commands {
     /// Display build metadata
     Info,
-    /// Create a new page interactively
-    Create {
-        /// Type of page: "blog" for a blog post, omit for an index page
-        kind: Option<String>,
-    },
+
+    /// Create a new page interactively.
+    /// kind: "blog" for a blog post, "page" for a generic page, omit for index.
+    Create { kind: Option<String> },
+
     /// Manage site configuration
     Config {
         #[command(subcommand)]
         action: ConfigAction,
     },
+
     /// Build the static site from markdown sources
     Compile {
         /// Source content directory (default: "content")
@@ -68,6 +77,7 @@ enum Commands {
         /// Output directory (default: "dist")
         output_dir: Option<String>,
     },
+
     /// Start a local development server
     Serve {
         /// Port to listen on (default: 3000)
@@ -79,6 +89,7 @@ enum Commands {
 enum ConfigAction {
     /// Show the current configuration
     Show,
+
     /// Set a configuration value: key value
     Set {
         /// Configuration key
@@ -86,18 +97,19 @@ enum ConfigAction {
         /// Value to set
         value: String,
     },
+
     /// Add a navigation item: label url
-    AddNav {
-        /// Link label
-        label: String,
-        /// Link URL
-        url: String,
-    },
+    AddNav { label: String, url: String },
+
     /// Remove a navigation item by its index
-    RemoveNav {
-        /// Index of the navigation item to remove
-        index: usize,
-    },
+    RemoveNav { index: usize },
+
+    /// Add a sidebar item: label url
+    AddSidebar { label: String, url: String },
+
+    /// Remove a sidebar item by its index
+    RemoveSidebar { index: usize },
+
     /// Validate all markdown files in the content directory
     Check,
 }
@@ -111,6 +123,7 @@ fn main() -> Result<()> {
         }
         Commands::Create { kind } => match kind.as_deref() {
             Some("blog") => create::create_blog_post()?,
+            Some("page") => create::create_page()?,
             _ => create::create_index_page()?,
         },
         Commands::Config { action } => match action {
@@ -118,6 +131,8 @@ fn main() -> Result<()> {
             ConfigAction::Set { key, value } => config::set_config_value(&key, &value)?,
             ConfigAction::AddNav { label, url } => config::add_nav_item(&label, &url)?,
             ConfigAction::RemoveNav { index } => config::remove_nav_item(index)?,
+            ConfigAction::AddSidebar { label, url } => config::add_sidebar_item(&label, &url)?,
+            ConfigAction::RemoveSidebar { index } => config::remove_sidebar_item(index)?,
             ConfigAction::Check => config::validate_all()?,
         },
         Commands::Compile {
@@ -132,7 +147,9 @@ fn main() -> Result<()> {
             let port = port.unwrap_or(3000);
             let output_dir = "dist";
             if !std::path::Path::new(output_dir).exists() {
-                compiler::compile_site("content", output_dir)?;
+                println!("Output directory not found, building site first...");
+                compiler::compile_site("content", output_dir)
+                    .context("Failed to build site before serving")?;
             }
             serve::start_server(output_dir, port)?;
         }
